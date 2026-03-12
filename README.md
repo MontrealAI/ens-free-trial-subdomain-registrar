@@ -114,6 +114,7 @@ npm run setup:parent:mainnet
 
 Script safety checks include:
 - strict `chainId == 1`
+- ENS NameWrapper and registrar bytecode existence checks
 - non-zero signer ETH balance
 - parent lock validation before activation
 - registrar approval checks against NameWrapper
@@ -137,7 +138,8 @@ npm run register:mainnet -- \
 Script safety checks include:
 - strict `chainId == 1`
 - non-zero signer ETH balance
-- `REGISTRAR_ADDRESS` must contain deployed bytecode
+- `REGISTRAR_ADDRESS` and non-zero `RESOLVER` must contain deployed bytecode
+- records require a non-zero resolver
 - `PARENT_NODE` must be a 32-byte hex node if provided directly
 - onchain label validation preview before submitting tx
 

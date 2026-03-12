@@ -27,6 +27,11 @@ async function main() {
     throw new Error("Deployer balance is zero. Fund the deployer wallet before deployment.");
   }
 
+  const wrapperCode = await provider.getCode(wrapper);
+  if (wrapperCode === "0x") {
+    throw new Error(`ENS_NAME_WRAPPER=${wrapper} has no contract bytecode on mainnet. Refusing to deploy.`);
+  }
+
   console.log(`Network: ${networkName}`);
   console.log(`Deployer: ${deployer.address}`);
   console.log(`Deployer ETH balance: ${ethers.formatEther(deployerBalance)} ETH`);

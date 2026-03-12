@@ -99,6 +99,17 @@ async function main() {
     throw new Error("ownerControlledFuses must be an integer between 0 and 65535.");
   }
 
+  if (resolver === ethers.ZeroAddress && records.length > 0) {
+    throw new Error("Resolver is required when records are provided.");
+  }
+
+  if (resolver !== ethers.ZeroAddress) {
+    const resolverCode = await ethers.provider.getCode(resolver);
+    if (resolverCode === "0x") {
+      throw new Error(`RESOLVER=${resolver} has no contract bytecode on mainnet.`);
+    }
+  }
+
   const registrar = await ethers.getContractAt("FreeTrialSubdomainRegistrar", registrarAddress, signer);
 
   const code = await ethers.provider.getCode(registrarAddress);
