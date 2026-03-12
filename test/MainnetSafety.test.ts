@@ -2,6 +2,9 @@ import { expect } from "chai";
 
 import {
   requireMainnetBroadcastConfirmation,
+  getManifestPath,
+  readDeploymentManifest,
+  updateDeploymentManifest,
   writeDeploymentManifest,
   type DeploymentManifest
 } from "../scripts/utils/mainnet-safety";
@@ -55,6 +58,7 @@ describe("mainnet safety helpers", function () {
       blockNumber: 123,
       constructorArgs: ["0x0000000000000000000000000000000000000002"],
       timestamp: new Date().toISOString(),
+      buildProfile: "production-solc-0.8.17-optimizer-200",
       verification: {
         command: "npm run verify:mainnet -- ...",
         status: "pending"
@@ -63,5 +67,26 @@ describe("mainnet safety helpers", function () {
 
     const outputPath = await writeDeploymentManifest(manifest);
     expect(outputPath).to.include("deployments/hardhatMainnet");
+
+    const readBack = await readDeploymentManifest(outputPath);
+    expect(readBack.buildProfile).to.equal("production-solc-0.8.17-optimizer-200");
+
+    await updateDeploymentManifest(outputPath, (current) => ({
+      ...current,
+      verification: {
+        ...current.verification,
+        status: "verified",
+        notes: "test update"
+      }
+    }));
+
+    const updated = await readDeploymentManifest(outputPath);
+    expect(updated.verification.status).to.equal("verified");
+    expect(updated.verification.notes).to.equal("test update");
+  });
+
+  it("builds deterministic manifest path", function () {
+    const path = getManifestPath("mainnet", "0x00000000000000000000000000000000000000AA");
+    expect(path).to.include("deployments/mainnet/FreeTrialSubdomainRegistrar-0x00000000000000000000000000000000000000aa.json");
   });
 });
