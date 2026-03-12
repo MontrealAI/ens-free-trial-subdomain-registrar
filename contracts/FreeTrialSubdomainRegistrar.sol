@@ -352,14 +352,19 @@ contract FreeTrialSubdomainRegistrar is ERC1155Holder, ReentrancyGuard {
 
     function _setRecords(bytes32 node, address resolver, bytes[] memory records) internal {
         for (uint256 i = 0; i < records.length; ) {
-            if (records[i].length < 36) revert InvalidRecordPayload(i);
+            bytes memory record = records[i];
+            if (record.length < 36) revert InvalidRecordPayload(i);
 
-            bytes32 txNamehash = bytes32(records[i][4:36]);
+            bytes32 txNamehash;
+            assembly {
+                txNamehash := mload(add(record, 36))
+            }
+
             if (txNamehash != node) {
                 revert RecordNamehashMismatch(node, txNamehash);
             }
 
-            resolver.functionCall(records[i], "FreeTrialSubdomainRegistrar: failed to set record");
+            resolver.functionCall(record, "FreeTrialSubdomainRegistrar: failed to set record");
 
             unchecked {
                 ++i;

@@ -70,6 +70,7 @@ Optional inputs:
 Safety notes:
   - Activation requires parent to be wrapped, locked (CANNOT_UNWRAP burned), and registrar-approved.
   - Deactivate/remove stop NEW mints only. Existing subnames stay valid until their expiry.
+  - Approval flow is only executed for action=activate.
   - If both parent name and parent node are supplied, they must match exactly.`);
 }
 
@@ -151,19 +152,23 @@ async function main() {
     );
   }
 
-  if (!alreadyApproved) {
-    if (!signerIsParentOwner) {
-      throw new Error(
-        "Registrar is not approved by the wrapped parent owner. Switch to the parent owner account (or Safe owner flow), approve registrar, and run again."
-      );
-    }
+  if (action === "activate") {
+    if (!alreadyApproved) {
+      if (!signerIsParentOwner) {
+        throw new Error(
+          "Registrar is not approved by the wrapped parent owner. Switch to the parent owner account (or Safe owner flow), approve registrar, and run again."
+        );
+      }
 
-    console.log("Approving registrar via NameWrapper.setApprovalForAll...");
-    const approveTx = await wrapper.setApprovalForAll(registrarAddress, true);
-    await approveTx.wait();
-    console.log(`Approval confirmed in tx ${approveTx.hash}.`);
+      console.log("Approving registrar via NameWrapper.setApprovalForAll...");
+      const approveTx = await wrapper.setApprovalForAll(registrarAddress, true);
+      await approveTx.wait();
+      console.log(`Approval confirmed in tx ${approveTx.hash}.`);
+    } else {
+      console.log("Registrar already approved on NameWrapper by wrapped parent owner.");
+    }
   } else {
-    console.log("Registrar already approved on NameWrapper by wrapped parent owner.");
+    console.log("Skipping registrar approval checks for deactivate/remove action.");
   }
 
   let lifecycleTx;
