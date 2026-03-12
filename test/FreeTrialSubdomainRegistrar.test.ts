@@ -134,6 +134,36 @@ describe("FreeTrialSubdomainRegistrar", function () {
 
     const [, fuses] = await wrapper.getData(childNode);
     expect(BigInt(fuses) & (1n << 18n)).to.equal(0n);
+
+    await expect((wrapper as any).connect(user).extendExpiry(childNode, Number(now + THIRTY_DAYS + 5n))).to.be.revertedWith("cannot modify");
+  });
+
+  it("allows record setting only when payload namehash matches child node", async function () {
+    const { registrar, wrapper, parentNode, now, user, resolver } = await deployFixture();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
+
+    const label = "trialpass8";
+    const childNode = ethers.keccak256(
+      ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes(label))])
+    );
+    const record = resolver.interface.encodeFunctionData("setAddr", [childNode, user.address]);
+
+    await registrar.register(parentNode, label, user.address, await resolver.getAddress(), 0, [record]);
+    expect(await resolver.lastNode()).to.equal(childNode);
+    expect(await resolver.lastAddress()).to.equal(user.address);
+  });
+
+  it("rejects record payload when calldata namehash doesn't match child node", async function () {
+    const { registrar, wrapper, parentNode, now, user, resolver } = await deployFixture();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
+
+    const label = "trialpass8";
+    const wrongNode = ethers.namehash("wrong.example.eth");
+    const badRecord = resolver.interface.encodeFunctionData("setAddr", [wrongNode, user.address]);
+
+    await expect(
+      registrar.register(parentNode, label, user.address, await resolver.getAddress(), 0, [badRecord])
+    ).to.be.revertedWithCustomError(registrar, "RecordNamehashMismatch");
   });
 
   it("rejects ETH sent directly", async function () {

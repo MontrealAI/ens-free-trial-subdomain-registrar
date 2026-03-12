@@ -53,6 +53,7 @@ Set required values:
 MAINNET_RPC_URL=...
 DEPLOYER_PRIVATE_KEY=...
 ETHERSCAN_API_KEY=...
+CONFIRM_MAINNET_DEPLOY=DEPLOY_MAINNET_FREE_TRIAL_REGISTRAR
 REGISTRAR_ADDRESS=0x... # after deploy
 PARENT_NAME=example.eth
 ```
@@ -70,6 +71,8 @@ ENS_NAME_WRAPPER=0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401
 ```bash
 npm run deploy:mainnet
 ```
+
+Safety guard: deployment script refuses to run unless `CONFIRM_MAINNET_DEPLOY=DEPLOY_MAINNET_FREE_TRIAL_REGISTRAR` is set.
 
 ### 2) Lock parent in ENS Manager
 
@@ -96,6 +99,8 @@ npm run register:mainnet -- \
   --label trialpass8 \
   --owner 0xRecipient
 ```
+
+Tip: run `npm run register:mainnet -- --help` to print full CLI options.
 
 ### 5) Verify contract
 
@@ -124,6 +129,17 @@ npm run verify:mainnet -- 0xYourRegistrar 0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE2568
 - `RegistrarNotAuthorised`: run setup script from account that can approve operator for the wrapped parent.
 - `InvalidLabelCharacter` / `LabelTooShort`: fix label to `[a-z0-9]{8,63}`.
 - `Unavailable`: name currently has unexpired wrapped registration.
+- `Refusing to deploy without explicit confirmation`: set `CONFIRM_MAINNET_DEPLOY` exactly as shown in `.env.example`.
+
+## Mainnet operator runbook (minimal)
+
+1. Confirm you are using the correct mainnet NameWrapper (`0xD4416...6401` unless intentionally overridden).
+2. Deploy with a dedicated operator key; verify printed chain ID is `1`.
+3. Verify contract on Etherscan immediately after deployment.
+4. In ENS Manager, verify parent is wrapped and locked (`CANNOT_UNWRAP` burned).
+5. Run setup script from wrapped parent owner (or approved Safe flow), then confirm `ParentConfigured` event.
+6. Run one controlled trial registration and verify expiry equals 30 days or parent-cap, whichever is smaller.
+7. Store final command snippets in your internal runbook so operators do not improvise.
 
 ## Manual pre-mainnet checklist
 
