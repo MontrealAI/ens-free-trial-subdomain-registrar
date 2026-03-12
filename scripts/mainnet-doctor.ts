@@ -53,6 +53,11 @@ async function main() {
   const [signer] = await ethers.getSigners();
   const signerAddress = await signer.getAddress();
   const signerBalance = await provider.getBalance(signerAddress);
+  if (signerBalance === 0n) {
+    throw new Error(
+      "Signer has zero ETH balance. Doctor preflight failed because state-changing mainnet scripts require gas funds."
+    );
+  }
 
   const wrapperAddress = requireAddress("ENS_NAME_WRAPPER", process.env.ENS_NAME_WRAPPER || DEFAULT_WRAPPER, ethers);
   const wrapperCode = await provider.getCode(wrapperAddress);
