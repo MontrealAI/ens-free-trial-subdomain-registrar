@@ -66,6 +66,13 @@ async function main() {
   const wrapper = await ethers.getContractAt(WRAPPER_ABI, wrapperAddress, signer);
   const registrar = await ethers.getContractAt("FreeTrialSubdomainRegistrar", registrarAddress, signer);
 
+  const configuredWrapper = await registrar.wrapper();
+  if (configuredWrapper.toLowerCase() !== wrapperAddress.toLowerCase()) {
+    throw new Error(
+      `Registrar wrapper mismatch: registrar points to ${configuredWrapper} but ENS_NAME_WRAPPER is ${wrapperAddress}. Refusing to proceed.`
+    );
+  }
+
   const [parentOwner] = await wrapper.getData(parentNode);
   const parentLocked = await wrapper.allFusesBurned(parentNode, CANNOT_UNWRAP);
   const alreadyApproved = await wrapper.isApprovedForAll(parentOwner, registrarAddress);
@@ -97,7 +104,7 @@ async function main() {
     await approveTx.wait();
     console.log("Approval confirmed.");
   } else {
-    console.log("Signer already approved registrar on NameWrapper.");
+    console.log("Registrar already approved on NameWrapper by wrapped parent owner.");
   }
 
   console.log(active ? "Activating parent..." : "Deactivating parent...");

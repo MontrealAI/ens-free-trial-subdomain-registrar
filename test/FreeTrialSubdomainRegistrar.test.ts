@@ -327,4 +327,91 @@ describe("FreeTrialSubdomainRegistrar", function () {
 
     await expect(registrar.setupDomain(parentNode, true)).to.be.revertedWithCustomError(registrar, "ParentExpired");
   });
+  it("caps .eth child expiry to parent effective expiry when effective lifetime is below 30 days", async function () {
+    const { registrar, wrapper, parentNode, now, user } = await deployFixture();
+    const effectiveLifetime = 10n * 24n * 60n * 60n;
+    const parentExpiryIncludingGrace = now + NINETY_DAYS + effectiveLifetime;
+    await activateParent(wrapper, registrar, parentNode, parentExpiryIncludingGrace, CANNOT_UNWRAP | IS_DOT_ETH);
+
+    await registrar.register(parentNode, "trialpass8", user.address, ethers.ZeroAddress, 0, []);
+
+    const childNode = ethers.keccak256(
+      ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))])
+    );
+
+    const [, , expiry] = await wrapper.getData(childNode);
+    expect(BigInt(expiry)).to.equal(now + effectiveLifetime);
+  });
+
+  it("register reverts if parent becomes unlocked after setup", async function () {
+    const { registrar, wrapper, parentNode, now, user } = await deployFixture();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
+
+    await wrapper.setNameData(parentNode, await wrapper.getAddress(), 0, Number(now + THIRTY_DAYS + 1000n), true);
+
+    await expect(
+      registrar.register(parentNode, "trialpass8", user.address, ethers.ZeroAddress, 0, [])
+    ).to.be.revertedWithCustomError(registrar, "ParentNotLocked");
+  });
+
+  it("register reverts if parent effective expiry passes after setup", async function () {
+    const { registrar, wrapper, parentNode, user } = await deployFixture();
+    const now = await latestTimestamp();
+    await activateParent(wrapper, registrar, parentNode, now + 100n);
+
+    await ethers.provider.send("evm_setNextBlockTimestamp", [Number(now + 101n)]);
+    await ethers.provider.send("evm_mine", []);
+
+    await expect(
+      registrar.register(parentNode, "trialpass8", user.address, ethers.ZeroAddress, 0, [])
+    ).to.be.revertedWithCustomError(registrar, "ParentExpired");
+  });
+
+  it("supports re-registration after previous child expiry", async function () {
+    const { registrar, wrapper, parentNode, user } = await deployFixture();
+    const now = await latestTimestamp();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 2000n);
+
+    await registrar.register(parentNode, "trialpass8", user.address, ethers.ZeroAddress, 0, []);
+
+    const childNode = ethers.keccak256(
+      ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))])
+    );
+    const [, , firstExpiry] = await wrapper.getData(childNode);
+
+    await ethers.provider.send("evm_setNextBlockTimestamp", [Number(BigInt(firstExpiry) + 1n)]);
+    await ethers.provider.send("evm_mine", []);
+
+    expect(await registrar.available(childNode)).to.equal(true);
+    await registrar.register(parentNode, "trialpass8", user.address, ethers.ZeroAddress, 0, []);
+  });
+
+  it("label validation property: random labels accepted iff [a-z0-9]{8,63}", async function () {
+    const { registrar } = await deployFixture();
+
+    const allowed = "abcdefghijklmnopqrstuvwxyz0123456789";
+    const disallowed = "ABCDEFGHIJKLMNOPQRSTUVWXYZ-_!@#.$%^&*()[]{}+=/\\";
+
+    function randomInt(min: number, max: number): number {
+      return Math.floor(Math.random() * (max - min + 1)) + min;
+    }
+
+    function randomChar(chars: string): string {
+      return chars[randomInt(0, chars.length - 1)];
+    }
+
+    for (let i = 0; i < 100; i++) {
+      const length = randomInt(1, 70);
+      let label = "";
+
+      for (let j = 0; j < length; j++) {
+        const useAllowed = Math.random() > 0.25;
+        label += useAllowed ? randomChar(allowed) : randomChar(disallowed);
+      }
+
+      const expected = /^[a-z0-9]{8,63}$/.test(label);
+      expect(await registrar.validateLabel(label)).to.equal(expected);
+    }
+  });
+
 });
