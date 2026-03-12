@@ -31,7 +31,7 @@ This ensures:
   - plus optional **owner-controlled** fuses from caller
 - Registrar does **not** grant `CAN_EXTEND_EXPIRY`.
 - Child owner cannot self-renew / self-extend through this system.
-- Registration is free (`register` is non-payable; contract rejects direct ETH transfers).
+- Registration is free (`register` reverts if any ETH is sent; contract also rejects direct ETH transfers).
 - Label validation is onchain and strict: lowercase alphanumeric only, length 8–63.
 
 ## 3) Repository layout

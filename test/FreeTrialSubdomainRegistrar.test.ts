@@ -5,6 +5,7 @@ const CANNOT_UNWRAP = 1n;
 const CANNOT_TRANSFER = 4n;
 const PARENT_CANNOT_CONTROL = 1n << 16n;
 const IS_DOT_ETH = 1n << 17n;
+const CAN_EXTEND_EXPIRY = 1n << 18n;
 const THIRTY_DAYS = 30n * 24n * 60n * 60n;
 const NINETY_DAYS = 90n * 24n * 60n * 60n;
 
@@ -184,14 +185,29 @@ describe("FreeTrialSubdomainRegistrar", function () {
       ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))])
     );
 
-    const [, fuses] = await wrapper.getData(childNode);
-    expect(BigInt(fuses) & (1n << 18n)).to.equal(0n);
+    const [, fuses, expiry] = await wrapper.getData(childNode);
+    expect(BigInt(fuses) & CAN_EXTEND_EXPIRY).to.equal(0n);
+
+    await expect(
+      (wrapper.connect(user) as any).extendExpiry(childNode, BigInt(expiry) + 1n)
+    ).to.be.revertedWith("cannot extend");
   });
 
   it("rejects ETH sent directly", async function () {
     const { registrar, deployer } = await deployFixture();
     await expect(
       deployer.sendTransaction({ to: await registrar.getAddress(), value: ethers.parseEther("0.1") })
+    ).to.be.revertedWithCustomError(registrar, "EtherNotAccepted");
+  });
+
+  it("rejects accidental ETH sent to register", async function () {
+    const { registrar, wrapper, parentNode, now, user } = await deployFixture();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
+
+    await expect(
+      registrar.register(parentNode, "trialpass8", user.address, ethers.ZeroAddress, 0, [], {
+        value: ethers.parseEther("0.0001")
+      })
     ).to.be.revertedWithCustomError(registrar, "EtherNotAccepted");
   });
 

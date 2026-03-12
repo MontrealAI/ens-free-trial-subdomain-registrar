@@ -120,7 +120,8 @@ contract FreeTrialSubdomainRegistrar is ERC1155Holder, ReentrancyGuard {
         address resolver,
         uint16 ownerControlledFuses,
         bytes[] calldata records
-    ) external nonReentrant {
+    ) external payable nonReentrant {
+        if (msg.value != 0) revert EtherNotAccepted();
         if (!activeParents[parentNode]) revert ParentNameNotActive(parentNode);
         if (newOwner == address(0)) revert InvalidOwner();
 
