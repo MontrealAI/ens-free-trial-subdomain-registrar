@@ -29,10 +29,15 @@ function parseRecords(): string[] {
 const { ethers, networkName } = await network.connect();
 
 async function main() {
+  if (networkName !== "mainnet") {
+    throw new Error(`Refusing to run registration on '${networkName}'. Use --network mainnet.`);
+  }
+
   const registrarAddress = readFlag("registrar") || process.env.REGISTRAR_ADDRESS;
   const label = readFlag("label") || process.env.LABEL;
 
   if (!registrarAddress) throw new Error("Provide --registrar or set REGISTRAR_ADDRESS.");
+  if (!ethers.isAddress(registrarAddress)) throw new Error(`Invalid registrar address: ${registrarAddress}`);
   if (!label) throw new Error("Provide --label or set LABEL.");
 
   const [signer] = await ethers.getSigners();
@@ -45,6 +50,9 @@ async function main() {
   const ownerControlledFusesRaw = readFlag("fuses") || process.env.OWNER_CONTROLLED_FUSES || "0";
   const ownerControlledFuses = Number(ownerControlledFusesRaw);
   const records = parseRecords();
+
+  if (!ethers.isAddress(newOwner)) throw new Error(`Invalid owner address: ${newOwner}`);
+  if (!ethers.isAddress(resolver)) throw new Error(`Invalid resolver address: ${resolver}`);
 
   if (!Number.isInteger(ownerControlledFuses) || ownerControlledFuses < 0 || ownerControlledFuses > 65535) {
     throw new Error("ownerControlledFuses must be an integer between 0 and 65535.");
@@ -72,14 +80,7 @@ async function main() {
   console.log(`Expected expiry: ${expiry} (${expiryDate})`);
 
   console.log("Submitting registration transaction...");
-  const tx = await registrar.register(
-    parentNode,
-    label,
-    newOwner,
-    resolver,
-    ownerControlledFuses,
-    records
-  );
+  const tx = await registrar.register(parentNode, label, newOwner, resolver, ownerControlledFuses, records);
   await tx.wait();
 
   const node = ethers.keccak256(

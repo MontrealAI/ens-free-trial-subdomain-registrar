@@ -4,8 +4,19 @@ const DEFAULT_WRAPPER = "0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401";
 
 const { ethers, networkName } = await network.connect();
 
+function requireMainnet(name: string) {
+  if (name !== "mainnet") {
+    throw new Error(`Refusing to run deployment on '${name}'. Use --network mainnet.`);
+  }
+}
+
 async function main() {
+  requireMainnet(networkName);
+
   const wrapper = process.env.ENS_NAME_WRAPPER || DEFAULT_WRAPPER;
+  if (!ethers.isAddress(wrapper)) {
+    throw new Error(`Invalid ENS_NAME_WRAPPER address: ${wrapper}`);
+  }
 
   console.log(`Deploying FreeTrialSubdomainRegistrar to ${networkName}...`);
   console.log(`Using ENS NameWrapper: ${wrapper}`);

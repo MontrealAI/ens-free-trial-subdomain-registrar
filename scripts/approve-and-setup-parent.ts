@@ -23,13 +23,17 @@ function resolveParentNode(ethersLib: typeof import("ethers")): string {
 const { ethers, networkName } = await network.connect();
 
 async function main() {
+  if (networkName !== "mainnet") {
+    throw new Error(`Refusing to run setup on '${networkName}'. Use --network mainnet.`);
+  }
+
   const wrapperAddress = process.env.ENS_NAME_WRAPPER || DEFAULT_WRAPPER;
   const registrarAddress = process.env.REGISTRAR_ADDRESS;
   const active = (process.env.ACTIVE || "true").toLowerCase() === "true";
 
-  if (!registrarAddress) {
-    throw new Error("Set REGISTRAR_ADDRESS in your environment.");
-  }
+  if (!registrarAddress) throw new Error("Set REGISTRAR_ADDRESS in your environment.");
+  if (!ethers.isAddress(registrarAddress)) throw new Error(`Invalid REGISTRAR_ADDRESS: ${registrarAddress}`);
+  if (!ethers.isAddress(wrapperAddress)) throw new Error(`Invalid ENS_NAME_WRAPPER: ${wrapperAddress}`);
 
   const parentNode = resolveParentNode(ethers);
   const [signer] = await ethers.getSigners();
@@ -76,6 +80,7 @@ async function main() {
   await setupTx.wait();
 
   console.log(`Parent active = ${active}`);
+  console.log("Done. You can now use npm run register:mainnet to mint trial subnames.");
 }
 
 main().catch((error) => {
