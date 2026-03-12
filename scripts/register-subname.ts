@@ -1,23 +1,9 @@
 import { network } from "hardhat";
 import { readFlagValue, hasFlag } from "./utils/cli-flags.js";
 import { validateSingleLabelInput } from "./utils/label-input.js";
+import { resolveParentNodeInput } from "./utils/parent-input.js";
 
 const MAINNET_CHAIN_ID = 1n;
-
-function resolveParentNode(ethersLib: typeof import("ethers")): string {
-  const parentNode = readFlagValue(process.argv, "parent-node") || process.env.PARENT_NODE;
-  const parentName = readFlagValue(process.argv, "parent-name") || process.env.PARENT_NAME;
-
-  if (parentNode) {
-    if (!ethersLib.isHexString(parentNode, 32)) {
-      throw new Error("PARENT_NODE / --parent-node must be a 32-byte hex value.");
-    }
-    return parentNode;
-  }
-  if (parentName) return ethersLib.namehash(parentName);
-
-  throw new Error("Provide --parent-name, --parent-node, PARENT_NAME, or PARENT_NODE.");
-}
 
 function parseRecords(ethersLib: typeof import("ethers")): string[] {
   const raw = readFlagValue(process.argv, "records") || process.env.RECORDS_JSON || "[]";
@@ -81,8 +67,9 @@ async function main() {
     throw new Error("Signer has zero ETH balance. Fund the account for gas before registering.");
   }
 
-  const parentNode = resolveParentNode(ethers);
-  const parentName = readFlagValue(process.argv, "parent-name") || process.env.PARENT_NAME;
+  const parentNodeInput = readFlagValue(process.argv, "parent-node") || process.env.PARENT_NODE;
+  const parentNameInput = readFlagValue(process.argv, "parent-name") || process.env.PARENT_NAME;
+  const { parentNode, normalizedParentName } = resolveParentNodeInput(ethers, parentNodeInput, parentNameInput);
   const newOwner = requireAddress("NEW_OWNER", readFlagValue(process.argv, "owner") || process.env.NEW_OWNER || signerAddress, ethers);
   const resolverRaw = readFlagValue(process.argv, "resolver") || process.env.RESOLVER || ethers.ZeroAddress;
   const resolver = requireAddress("RESOLVER", resolverRaw, ethers);
@@ -112,7 +99,7 @@ async function main() {
     throw new Error(`No contract code found at REGISTRAR_ADDRESS=${registrarAddress}.`);
   }
 
-  validateSingleLabelInput(label, parentName);
+  validateSingleLabelInput(label, normalizedParentName);
 
   const isValid = await registrar.validateLabel(label);
   if (!isValid) {
@@ -137,7 +124,7 @@ async function main() {
   console.log(`Network: ${networkName}`);
   console.log(`Registrar: ${registrarAddress}`);
   console.log(`Parent node: ${parentNode}`);
-  if (parentName) console.log(`Parent name: ${parentName}`);
+  if (normalizedParentName) console.log(`Parent name: ${normalizedParentName}`);
   console.log(`Label: ${label}`);
   console.log(`New owner: ${newOwner}`);
   console.log(`Resolver: ${resolver}`);
@@ -152,8 +139,8 @@ async function main() {
 
   console.log("Done.");
   console.log(`Subname node: ${node}`);
-  if (parentName) {
-    console.log(`Human name: ${label}.${parentName}`);
+  if (normalizedParentName) {
+    console.log(`Human name: ${label}.${normalizedParentName}`);
   }
   console.log("Next steps:");
   console.log("1) Open app.ens.domains and search the new name to confirm wrapped state and expiry.");
