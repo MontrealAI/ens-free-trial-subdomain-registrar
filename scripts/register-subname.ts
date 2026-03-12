@@ -1,5 +1,7 @@
 import { network } from "hardhat";
 
+const MAINNET_CHAIN_ID = 1n;
+
 function hasFlag(name: string): boolean {
   return process.argv.includes(`--${name}`);
 }
@@ -15,7 +17,12 @@ function resolveParentNode(ethersLib: typeof import("ethers")): string {
   const parentNode = readFlag("parent-node") || process.env.PARENT_NODE;
   const parentName = readFlag("parent-name") || process.env.PARENT_NAME;
 
-  if (parentNode) return parentNode;
+  if (parentNode) {
+    if (!ethersLib.isHexString(parentNode, 32)) {
+      throw new Error("PARENT_NODE / --parent-node must be a 32-byte hex value.");
+    }
+    return parentNode;
+  }
   if (parentName) return ethersLib.namehash(parentName);
 
   throw new Error("Provide --parent-name, --parent-node, PARENT_NAME, or PARENT_NODE.");
@@ -59,6 +66,10 @@ async function main() {
   }
 
   const { ethers, networkName } = await network.connect();
+  const chainId = (await ethers.provider.getNetwork()).chainId;
+  if (chainId !== MAINNET_CHAIN_ID) {
+    throw new Error(`This script is mainnet-only. Connected chainId=${chainId.toString()}.`);
+  }
 
   const registrarAddress = requireAddress("REGISTRAR_ADDRESS", readFlag("registrar") || process.env.REGISTRAR_ADDRESS, ethers);
   const label = readFlag("label") || process.env.LABEL;
@@ -70,6 +81,10 @@ async function main() {
 
   const [signer] = await ethers.getSigners();
   const signerAddress = await signer.getAddress();
+  const signerBalance = await ethers.provider.getBalance(signerAddress);
+  if (signerBalance === 0n) {
+    throw new Error("Signer has zero ETH balance. Fund the account for gas before registering.");
+  }
 
   const parentNode = resolveParentNode(ethers);
   const parentName = readFlag("parent-name") || process.env.PARENT_NAME;
@@ -85,6 +100,11 @@ async function main() {
   }
 
   const registrar = await ethers.getContractAt("FreeTrialSubdomainRegistrar", registrarAddress, signer);
+
+  const code = await ethers.provider.getCode(registrarAddress);
+  if (code === "0x") {
+    throw new Error(`No contract code found at REGISTRAR_ADDRESS=${registrarAddress}.`);
+  }
 
   const isValid = await registrar.validateLabel(label);
   if (!isValid) {

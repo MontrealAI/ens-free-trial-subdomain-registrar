@@ -15,7 +15,12 @@ function resolveParentNode(ethersLib: typeof import("ethers")): string {
   const parentNode = process.env.PARENT_NODE;
   const parentName = process.env.PARENT_NAME;
 
-  if (parentNode) return parentNode;
+  if (parentNode) {
+    if (!ethersLib.isHexString(parentNode, 32)) {
+      throw new Error("PARENT_NODE must be a 32-byte hex value.");
+    }
+    return parentNode;
+  }
   if (parentName) return ethersLib.namehash(parentName);
 
   throw new Error("Set PARENT_NAME or PARENT_NODE in your environment.");
@@ -43,6 +48,10 @@ async function main() {
 
   const [signer] = await ethers.getSigners();
   const signerAddress = await signer.getAddress();
+  const signerBalance = await ethers.provider.getBalance(signerAddress);
+  if (signerBalance === 0n) {
+    throw new Error("Signer has zero ETH balance. Fund the account for gas before setup.");
+  }
 
   const wrapper = await ethers.getContractAt(WRAPPER_ABI, wrapperAddress, signer);
   const registrar = await ethers.getContractAt("FreeTrialSubdomainRegistrar", registrarAddress, signer);
@@ -54,6 +63,7 @@ async function main() {
 
   console.log(`Network: ${networkName}`);
   console.log(`Signer: ${signerAddress}`);
+  console.log(`Signer ETH balance: ${ethers.formatEther(signerBalance)} ETH`);
   console.log(`Parent node: ${parentNode}`);
   console.log(`Wrapped parent owner: ${parentOwner}`);
   console.log(`Parent locked: ${parentLocked}`);

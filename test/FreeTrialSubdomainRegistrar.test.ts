@@ -119,6 +119,31 @@ describe("FreeTrialSubdomainRegistrar", function () {
       registrar.register(parentNode, "trialpass8", user.address, await resolver.getAddress(), 0, [payload])
     ).to.be.revertedWithCustomError(registrar, "RecordNamehashMismatch");
   });
+
+  it("rejects records when resolver is zero address", async function () {
+    const { registrar, wrapper, parentNode, now, user, resolver } = await deployFixture();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
+
+    const childNode = ethers.keccak256(
+      ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))])
+    );
+    const payload = resolver.interface.encodeFunctionData("setAddr", [childNode, user.address]);
+
+    await expect(
+      registrar.register(parentNode, "trialpass8", user.address, ethers.ZeroAddress, 0, [payload])
+    ).to.be.revertedWithCustomError(registrar, "ResolverRequired");
+  });
+
+  it("rejects short resolver record payloads", async function () {
+    const { registrar, wrapper, parentNode, now, user, resolver } = await deployFixture();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
+
+    const payload = resolver.interface.encodeFunctionData("setAddr", [ethers.namehash("wrong.eth"), user.address]).slice(0, 20);
+
+    await expect(
+      registrar.register(parentNode, "trialpass8", user.address, await resolver.getAddress(), 0, [payload])
+    ).to.be.revertedWithCustomError(registrar, "InvalidRecordPayload");
+  });
   it("rejects short labels", async function () {
     const { registrar, wrapper, parentNode, now, user } = await deployFixture();
     await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
@@ -245,5 +270,32 @@ describe("FreeTrialSubdomainRegistrar", function () {
     await wrapper.setCanModify(parentNode, (await ethers.getSigners())[0].address, true);
 
     await expect(registrar.setupDomain(parentNode, true)).to.be.revertedWithCustomError(registrar, "RegistrarNotAuthorised");
+  });
+
+  it("rejects setupDomain activation when parent effective expiry is already expired", async function () {
+    const { registrar, wrapper, parentNode, now } = await deployFixture();
+    const expired = now - 1n;
+    await wrapper.setNameData(parentNode, await wrapper.getAddress(), Number(CANNOT_UNWRAP), Number(expired), true);
+    await wrapper.setCanModify(parentNode, (await ethers.getSigners())[0].address, true);
+    await wrapper.setCanModify(parentNode, await registrar.getAddress(), true);
+
+    await expect(registrar.setupDomain(parentNode, true)).to.be.revertedWithCustomError(registrar, "ParentExpired");
+  });
+
+  it("rejects .eth setupDomain activation if only grace remains", async function () {
+    const { registrar, wrapper, parentNode } = await deployFixture();
+    const latest = await latestTimestamp();
+    const graceOnlyExpiry = latest + NINETY_DAYS;
+    await wrapper.setNameData(
+      parentNode,
+      await wrapper.getAddress(),
+      Number(CANNOT_UNWRAP | IS_DOT_ETH),
+      Number(graceOnlyExpiry),
+      true
+    );
+    await wrapper.setCanModify(parentNode, (await ethers.getSigners())[0].address, true);
+    await wrapper.setCanModify(parentNode, await registrar.getAddress(), true);
+
+    await expect(registrar.setupDomain(parentNode, true)).to.be.revertedWithCustomError(registrar, "ParentExpired");
   });
 });

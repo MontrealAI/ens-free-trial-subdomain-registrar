@@ -22,8 +22,14 @@ async function main() {
   }
 
   const [deployer] = await ethers.getSigners();
+  const deployerBalance = await provider.getBalance(deployer.address);
+  if (deployerBalance === 0n) {
+    throw new Error("Deployer balance is zero. Fund the deployer wallet before deployment.");
+  }
+
   console.log(`Network: ${networkName}`);
   console.log(`Deployer: ${deployer.address}`);
+  console.log(`Deployer ETH balance: ${ethers.formatEther(deployerBalance)} ETH`);
   console.log(`Using ENS NameWrapper: ${wrapper}`);
 
   const registrar = await ethers.deployContract("FreeTrialSubdomainRegistrar", [wrapper]);
