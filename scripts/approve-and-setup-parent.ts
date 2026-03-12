@@ -49,7 +49,8 @@ async function main() {
 
   const [parentOwner] = await wrapper.getData(parentNode);
   const parentLocked = await wrapper.allFusesBurned(parentNode, CANNOT_UNWRAP);
-  const alreadyApproved = await wrapper.isApprovedForAll(signerAddress, registrarAddress);
+  const alreadyApproved = await wrapper.isApprovedForAll(parentOwner, registrarAddress);
+  const signerIsParentOwner = parentOwner.toLowerCase() === signerAddress.toLowerCase();
 
   console.log(`Network: ${networkName}`);
   console.log(`Signer: ${signerAddress}`);
@@ -65,6 +66,12 @@ async function main() {
   }
 
   if (!alreadyApproved) {
+    if (!signerIsParentOwner) {
+      throw new Error(
+        "Registrar is not approved by wrapped parent owner. Switch to the wrapped parent owner account (or execute via Safe) and run again."
+      );
+    }
+
     console.log("Approving registrar via NameWrapper.setApprovalForAll...");
     const approveTx = await wrapper.setApprovalForAll(registrarAddress, true);
     await approveTx.wait();

@@ -3,6 +3,7 @@ import { network } from "hardhat";
 
 const CANNOT_UNWRAP = 1n;
 const CANNOT_TRANSFER = 4n;
+const CAN_EXTEND_EXPIRY = 1n << 18n;
 const PARENT_CANNOT_CONTROL = 1n << 16n;
 const IS_DOT_ETH = 1n << 17n;
 const THIRTY_DAYS = 30n * 24n * 60n * 60n;
@@ -29,6 +30,12 @@ describe("FreeTrialSubdomainRegistrar", function () {
     return { deployer, user, wrapper, registrar, resolver, parentNode, now };
   }
 
+  function childNode(parentNode: string, label: string): string {
+    return ethers.keccak256(
+      ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes(label))])
+    );
+  }
+
   async function activateParent(
     wrapper: any,
     registrar: any,
@@ -47,16 +54,16 @@ describe("FreeTrialSubdomainRegistrar", function () {
 
     await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
 
-    await registrar.register(parentNode, "trialpass8", user.address, ethers.ZeroAddress, 0, []);
+    const tx = await registrar.register(parentNode, "trialpass8", user.address, ethers.ZeroAddress, 0, []);
+    const receipt = await tx.wait();
+    const block = await ethers.provider.getBlock(receipt!.blockNumber);
 
-    const childNode = ethers.keccak256(
-      ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))])
-    );
+    const node = childNode(parentNode, "trialpass8");
 
-    const [, fuses, expiry] = await wrapper.getData(childNode);
+    const [, fuses, expiry] = await wrapper.getData(node);
     expect(BigInt(fuses) & CANNOT_UNWRAP).to.equal(CANNOT_UNWRAP);
     expect(BigInt(fuses) & PARENT_CANNOT_CONTROL).to.equal(PARENT_CANNOT_CONTROL);
-    expect(BigInt(expiry)).to.equal(now + THIRTY_DAYS);
+    expect(BigInt(expiry)).to.equal(BigInt(block!.timestamp) + THIRTY_DAYS);
   });
 
   it("rejects short labels", async function () {
@@ -84,11 +91,9 @@ describe("FreeTrialSubdomainRegistrar", function () {
 
     await registrar.register(parentNode, "trialpass8", user.address, ethers.ZeroAddress, 0, []);
 
-    const childNode = ethers.keccak256(
-      ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))])
-    );
+    const node = childNode(parentNode, "trialpass8");
 
-    const [, , expiry] = await wrapper.getData(childNode);
+    const [, , expiry] = await wrapper.getData(node);
     expect(BigInt(expiry)).to.equal(parentExpiry);
   });
 
@@ -97,27 +102,32 @@ describe("FreeTrialSubdomainRegistrar", function () {
     const parentExpiryIncludingGrace = now + NINETY_DAYS + THIRTY_DAYS + 5n;
     await activateParent(wrapper, registrar, parentNode, parentExpiryIncludingGrace, CANNOT_UNWRAP | IS_DOT_ETH);
 
-    await registrar.register(parentNode, "trialpass8", user.address, ethers.ZeroAddress, 0, []);
+    const tx = await registrar.register(parentNode, "trialpass8", user.address, ethers.ZeroAddress, 0, []);
+    const receipt = await tx.wait();
+    const block = await ethers.provider.getBlock(receipt!.blockNumber);
 
-    const childNode = ethers.keccak256(
-      ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))])
-    );
+    const node = childNode(parentNode, "trialpass8");
 
-    const [, , expiry] = await wrapper.getData(childNode);
-    expect(BigInt(expiry)).to.equal(now + THIRTY_DAYS);
+    const [, , expiry] = await wrapper.getData(node);
+    expect(BigInt(expiry)).to.equal(BigInt(block!.timestamp) + THIRTY_DAYS);
   });
 
   it("never grants CAN_EXTEND_EXPIRY and owner cannot self-renew", async function () {
     const { registrar, wrapper, parentNode, now, user } = await deployFixture();
     await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
 
-    await registrar.register(parentNode, "trialpass8", user.address, ethers.ZeroAddress, Number(CANNOT_TRANSFER), []);
-    const childNode = ethers.keccak256(
-      ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))])
+    await registrar.register(
+      parentNode,
+      "trialpass8",
+      user.address,
+      ethers.ZeroAddress,
+      Number(CANNOT_UNWRAP | CANNOT_TRANSFER),
+      []
     );
+    const node = childNode(parentNode, "trialpass8");
 
-    const [, fuses] = await wrapper.getData(childNode);
-    expect(BigInt(fuses) & (1n << 18n)).to.equal(0n);
+    const [, fuses] = await wrapper.getData(node);
+    expect(BigInt(fuses) & CAN_EXTEND_EXPIRY).to.equal(0n);
   });
 
   it("rejects ETH sent directly", async function () {
@@ -131,10 +141,8 @@ describe("FreeTrialSubdomainRegistrar", function () {
     const { registrar, wrapper, parentNode, now, user } = await deployFixture();
     await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
 
-    const childNode = ethers.keccak256(
-      ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))])
-    );
-    await wrapper.setNameData(childNode, user.address, Number(CANNOT_UNWRAP), Number(now + 1n), true);
+    const node = childNode(parentNode, "trialpass8");
+    await wrapper.setNameData(node, user.address, Number(CANNOT_UNWRAP), Number(now + 3600n), true);
 
     await expect(
       registrar.register(parentNode, "trialpass8", user.address, ethers.ZeroAddress, 0, [])
