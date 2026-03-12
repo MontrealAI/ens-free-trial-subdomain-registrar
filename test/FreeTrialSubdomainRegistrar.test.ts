@@ -66,6 +66,58 @@ describe("FreeTrialSubdomainRegistrar", function () {
     expect(BigInt(expiry)).to.be.lte(registeredAt + THIRTY_DAYS + 2n);
   });
 
+
+  it("rejects registrations when parent is not active", async function () {
+    const { registrar, wrapper, parentNode, now, user } = await deployFixture();
+    await wrapper.setNameData(parentNode, await wrapper.getAddress(), Number(CANNOT_UNWRAP), Number(now + THIRTY_DAYS + 1n), true);
+    await wrapper.setCanModify(parentNode, await registrar.getAddress(), true);
+
+    await expect(
+      registrar.register(parentNode, "trialpass8", user.address, ethers.ZeroAddress, 0, [])
+    ).to.be.revertedWithCustomError(registrar, "ParentNameNotActive");
+  });
+
+  it("allows owner-controlled fuses without requiring CANNOT_UNWRAP in the user input", async function () {
+    const { registrar, wrapper, parentNode, now, user } = await deployFixture();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
+
+    await registrar.register(parentNode, "trialpass8", user.address, ethers.ZeroAddress, Number(CANNOT_TRANSFER), []);
+
+    const childNode = ethers.keccak256(
+      ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))])
+    );
+
+    const [, fuses] = await wrapper.getData(childNode);
+    expect(BigInt(fuses) & CANNOT_TRANSFER).to.equal(CANNOT_TRANSFER);
+    expect(BigInt(fuses) & CANNOT_UNWRAP).to.equal(CANNOT_UNWRAP);
+  });
+
+  it("sets resolver records when calldata contains the child node", async function () {
+    const { registrar, wrapper, resolver, parentNode, now, user } = await deployFixture();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
+
+    const childNode = ethers.keccak256(
+      ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))])
+    );
+
+    const payload = resolver.interface.encodeFunctionData("setAddr", [childNode, user.address]);
+    await registrar.register(parentNode, "trialpass8", user.address, await resolver.getAddress(), 0, [payload]);
+
+    expect(await resolver.lastNode()).to.equal(childNode);
+    expect(await resolver.lastAddress()).to.equal(user.address);
+  });
+
+  it("rejects resolver records with mismatched namehash payload", async function () {
+    const { registrar, wrapper, resolver, parentNode, now, user } = await deployFixture();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
+
+    const wrongNode = ethers.namehash("wrong.eth");
+    const payload = resolver.interface.encodeFunctionData("setAddr", [wrongNode, user.address]);
+
+    await expect(
+      registrar.register(parentNode, "trialpass8", user.address, await resolver.getAddress(), 0, [payload])
+    ).to.be.revertedWithCustomError(registrar, "RecordNamehashMismatch");
+  });
   it("rejects short labels", async function () {
     const { registrar, wrapper, parentNode, now, user } = await deployFixture();
     await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);

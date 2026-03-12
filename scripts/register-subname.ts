@@ -34,6 +34,13 @@ function parseRecords(ethersLib: typeof import("ethers")): string[] {
   return value;
 }
 
+function printUsage(): void {
+  console.log(`Usage:
+  npm run register:mainnet -- --registrar 0x... --parent-name example.eth --label trialpass8 [--owner 0x...] [--resolver 0x...] [--fuses 0] [--records "[]"]
+
+Flags can also be provided through .env (see .env.example).`);
+}
+
 function requireAddress(name: string, value: string | undefined, ethersLib: typeof import("ethers")): string {
   if (!value || !ethersLib.isAddress(value)) {
     throw new Error(`${name} must be set to a valid address.`);
@@ -44,10 +51,18 @@ function requireAddress(name: string, value: string | undefined, ethersLib: type
 const { ethers, networkName } = await network.connect();
 
 async function main() {
+  if (readFlag("help") !== undefined) {
+    printUsage();
+    return;
+  }
+
   const registrarAddress = requireAddress("REGISTRAR_ADDRESS", readFlag("registrar") || process.env.REGISTRAR_ADDRESS, ethers);
   const label = readFlag("label") || process.env.LABEL;
 
-  if (!label) throw new Error("Provide --label or set LABEL.");
+  if (!label) {
+    printUsage();
+    throw new Error("Provide --label or set LABEL.");
+  }
 
   const [signer] = await ethers.getSigners();
   const signerAddress = await signer.getAddress();
