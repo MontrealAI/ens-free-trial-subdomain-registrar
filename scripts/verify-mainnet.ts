@@ -134,13 +134,16 @@ async function main() {
   } finally {
     if (manifestPath) {
       await fs.access(manifestPath);
+      const verifiedAt = status === "verified" ? new Date().toISOString() : undefined;
+      const explorerUrl = status === "verified" ? `https://etherscan.io/address/${address}#code` : undefined;
+
       await updateDeploymentManifest(manifestPath, (current) => ({
         ...current,
         verification: {
           ...current.verification,
           status,
-          verifiedAt: new Date().toISOString(),
-          explorerUrl: `https://etherscan.io/address/${address}#code`,
+          verifiedAt,
+          explorerUrl,
           notes: notes || current.verification.notes
         }
       }));
