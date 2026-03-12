@@ -107,10 +107,10 @@ async function main() {
 
   const isValid = await registrar.validateLabel(label);
   if (!isValid) {
-    throw new Error("Label failed onchain validation. Use lowercase letters and numbers only, length 8 to 63.");
+    throw new Error("Do not pass a full ENS name as the label. Use parent alpha.agent.agi.eth and label 12345678, which creates 12345678.alpha.agent.agi.eth. Label must be lowercase alphanumeric, 8-63 chars.");
   }
 
-  const parentActive = await registrar.activeParents(parentNode);
+  const parentActive = await registrar.isParentActive(parentNode);
   if (!parentActive) {
     throw new Error("Parent is not active in this registrar. Ask the operator to run setup:parent:mainnet first.");
   }

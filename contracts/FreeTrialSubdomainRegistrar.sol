@@ -66,6 +66,7 @@ contract FreeTrialSubdomainRegistrar is ERC1155Holder, ReentrancyGuard {
     mapping(bytes32 => bool) public activeParents;
 
     event ParentConfigured(bytes32 indexed parentNode, bool active);
+    event ParentRemoved(bytes32 indexed parentNode);
     event NameRegistered(
         bytes32 indexed parentNode,
         bytes32 indexed node,
@@ -97,22 +98,82 @@ contract FreeTrialSubdomainRegistrar is ERC1155Holder, ReentrancyGuard {
     /// @dev The caller must be able to modify the wrapped parent.
     function setupDomain(bytes32 parentNode, bool active) external authorised(parentNode) {
         if (active) {
-            _trialExpiry(parentNode);
-            _requireParentLocked(parentNode);
-            _requireRegistrarAuthorised(parentNode);
+            _activateParent(parentNode);
+            return;
         }
 
-        activeParents[parentNode] = active;
-        emit ParentConfigured(parentNode, active);
+        _deactivateParent(parentNode);
     }
 
-    /// @notice Registers a free trial subname.
-    /// @param parentNode Wrapped ENS parent node.
-    /// @param label Lowercase alphanumeric label, length 8..63 (single first-degree label only, no dots).
-    /// @param newOwner Final owner of the wrapped subname.
-    /// @param resolver Resolver address, or zero address if no resolver is needed.
-    /// @param ownerControlledFuses Optional owner-controlled fuses. CANNOT_UNWRAP is always forced on.
-    /// @param records Optional resolver calls. If present, resolver must be a contract and payloads must embed the child namehash.
+    /// @notice Activates a parent for new free-trial registrations.
+    /// @dev The caller must be authorized on the parent in NameWrapper.
+    function activateParent(bytes32 parentNode) external authorised(parentNode) {
+        _activateParent(parentNode);
+    }
+
+    /// @notice Deactivates a parent. Existing issued subnames remain valid until their current expiry.
+    /// @dev The caller must be authorized on the parent in NameWrapper.
+    function deactivateParent(bytes32 parentNode) external authorised(parentNode) {
+        _deactivateParent(parentNode);
+    }
+
+    /// @notice Removes a parent configuration entry from storage.
+    /// @dev Removal blocks new mints exactly like deactivation. Existing issued subnames are unaffected.
+    function removeParent(bytes32 parentNode) external authorised(parentNode) {
+        delete activeParents[parentNode];
+        emit ParentRemoved(parentNode);
+        emit ParentConfigured(parentNode, false);
+    }
+
+    /// @notice Etherscan-friendly helper for active status.
+    function isParentActive(bytes32 parentNode) external view returns (bool) {
+        return activeParents[parentNode];
+    }
+
+    /// @notice Returns the parent effective expiry used for registration caps.
+    /// @dev Reverts if the parent is not wrapped or already effectively expired.
+    function effectiveParentExpiry(bytes32 parentNode) external view returns (uint64) {
+        return _effectiveParentExpiry(parentNode);
+    }
+
+    /// @notice Returns the current parent status in a non-reverting, UI-friendly shape.
+    function getParentStatus(bytes32 parentNode)
+        external
+        view
+        returns (bool active, bool parentLocked, bool registrarAuthorised, bool parentUsable, uint64 parentEffectiveExpiry)
+    {
+        active = activeParents[parentNode];
+        parentLocked = wrapper.allFusesBurned(parentNode, CANNOT_UNWRAP);
+        registrarAuthorised = wrapper.canModifyName(parentNode, address(this));
+
+        try wrapper.getData(uint256(parentNode)) returns (
+            address,
+            uint32 fuses,
+            uint64 expiry
+        ) {
+            parentEffectiveExpiry = expiry;
+
+            if ((fuses & IS_DOT_ETH) == IS_DOT_ETH) {
+                if (expiry <= PARENT_GRACE_PERIOD) return (active, parentLocked, registrarAuthorised, false, 0);
+                parentEffectiveExpiry = expiry - PARENT_GRACE_PERIOD;
+            }
+
+            parentUsable = parentEffectiveExpiry > block.timestamp;
+            if (!parentUsable) {
+                parentEffectiveExpiry = 0;
+            }
+        } catch {
+            parentUsable = false;
+            parentEffectiveExpiry = 0;
+        }
+    }
+
+    /// @notice Etherscan-friendly happy path: register with no resolver records and no owner-controlled fuses.
+    function registerSimple(bytes32 parentNode, string calldata label, address newOwner) external payable nonReentrant {
+        _register(parentNode, label, newOwner, address(0), 0, new bytes[](0));
+    }
+
+    /// @notice Advanced registration path with optional resolver and record writes.
     function register(
         bytes32 parentNode,
         string calldata label,
@@ -121,6 +182,32 @@ contract FreeTrialSubdomainRegistrar is ERC1155Holder, ReentrancyGuard {
         uint16 ownerControlledFuses,
         bytes[] calldata records
     ) external payable nonReentrant {
+        _register(parentNode, label, newOwner, resolver, ownerControlledFuses, records);
+    }
+
+    function _activateParent(bytes32 parentNode) internal {
+        _trialExpiry(parentNode);
+        _requireParentLocked(parentNode);
+        _requireRegistrarAuthorised(parentNode);
+
+        activeParents[parentNode] = true;
+        emit ParentConfigured(parentNode, true);
+    }
+
+    function _deactivateParent(bytes32 parentNode) internal {
+        activeParents[parentNode] = false;
+        emit ParentConfigured(parentNode, false);
+    }
+
+    /// @notice Internal registration flow.
+    function _register(
+        bytes32 parentNode,
+        string calldata label,
+        address newOwner,
+        address resolver,
+        uint16 ownerControlledFuses,
+        bytes[] memory records
+    ) internal {
         if (msg.value != 0) revert EtherNotAccepted();
         if (!activeParents[parentNode]) revert ParentNameNotActive(parentNode);
         if (newOwner == address(0)) revert InvalidOwner();
@@ -263,16 +350,21 @@ contract FreeTrialSubdomainRegistrar is ERC1155Holder, ReentrancyGuard {
         return true;
     }
 
-    function _setRecords(bytes32 node, address resolver, bytes[] calldata records) internal {
+    function _setRecords(bytes32 node, address resolver, bytes[] memory records) internal {
         for (uint256 i = 0; i < records.length; ) {
-            if (records[i].length < 36) revert InvalidRecordPayload(i);
+            bytes memory record = records[i];
+            if (record.length < 36) revert InvalidRecordPayload(i);
 
-            bytes32 txNamehash = bytes32(records[i][4:36]);
+            bytes32 txNamehash;
+            assembly {
+                txNamehash := mload(add(record, 36))
+            }
+
             if (txNamehash != node) {
                 revert RecordNamehashMismatch(node, txNamehash);
             }
 
-            resolver.functionCall(records[i], "FreeTrialSubdomainRegistrar: failed to set record");
+            resolver.functionCall(record, "FreeTrialSubdomainRegistrar: failed to set record");
 
             unchecked {
                 ++i;

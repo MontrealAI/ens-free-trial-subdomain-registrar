@@ -40,7 +40,7 @@ This ensures:
 
 - `contracts/FreeTrialSubdomainRegistrar.sol` — registrar contract
 - `scripts/deploy-mainnet.ts` — mainnet deploy
-- `scripts/approve-and-setup-parent.ts` — approve + activate/deactivate parent
+- `scripts/approve-and-setup-parent.ts` — approve + activate/deactivate/remove parent
 - `scripts/register-subname.ts` — operator registration utility
 - `test/FreeTrialSubdomainRegistrar.test.ts` — contract tests with mocks
 - `.github/workflows/ci.yml` — CI for build/test/typecheck
@@ -68,6 +68,7 @@ npm run typecheck
 For a production-style, non-technical-operator walkthrough with copy/paste commands, see:
 
 - [`docs/use-cases/alpha-agent-agi-eth.md`](docs/use-cases/alpha-agent-agi-eth.md)
+- [`docs/etherscan-web-guide.md`](docs/etherscan-web-guide.md)
 
 That guide explicitly demonstrates first-degree free-trial subnames:
 
@@ -102,7 +103,7 @@ NEW_OWNER=0xRecipientAddress
 RESOLVER=0x0000000000000000000000000000000000000000
 OWNER_CONTROLLED_FUSES=0
 RECORDS_JSON=[]
-ACTIVE=true
+PARENT_ACTION=activate
 ```
 
 ## 7) Mainnet runbook
@@ -148,7 +149,13 @@ Script safety checks include:
 Deactivate later with:
 
 ```bash
-ACTIVE=false npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
+npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action deactivate --parent-name example.eth
+```
+
+Remove parent config entry (also blocks new mints):
+
+```bash
+npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action remove --parent-name example.eth
 ```
 
 ### Step D — Register subname
@@ -177,7 +184,7 @@ Script safety checks include:
 - `PARENT_NODE` must be a 32-byte hex node if provided directly
 - if both `PARENT_NAME` and `PARENT_NODE` are provided, they must resolve to the same node (fails closed on mismatch)
 - onchain label validation preview before submitting tx
-- parent active check (`activeParents`) before submitting tx
+- parent active check (`isParentActive`) before submitting tx
 - subname availability preflight (`available(node)`) before submitting tx
 
 Get CLI help:
@@ -247,7 +254,7 @@ Safety rules:
 - [ ] Confirm chain id before every state-changing command.
 - [ ] Keep `.env` out of version control.
 - [ ] Document parent node/name and registrar address in runbooks.
-- [ ] Keep a rollback action ready (`ACTIVE=false` for parent).
+- [ ] Keep a rollback action ready (`--action deactivate` or `--action remove` for parent).
 
 ## 12) Scope caveats
 
