@@ -3,9 +3,13 @@ const LABEL_REGEX = /^[a-z0-9]{8,63}$/;
 export function validateSingleLabelInput(label: string, parentName?: string): void {
   if (label.includes(".")) {
     const parentHint = parentName ?? "<parent-name>";
+    const looksLikeFullName = !!parentName && label.endsWith(`.${parentName}`);
+    const lead = looksLikeFullName
+      ? `Do not pass a full ENS name as --label (received "${label}").`
+      : `Invalid label "${label}": labels must be a single first-degree label with no dots.`;
     throw new Error(
       [
-        `Invalid label \"${label}\": labels must be a single first-degree label with no dots.`,
+        lead,
         `Use --parent-name ${parentHint} and --label <single-label>.`,
         `Example: --parent-name ${parentHint} --label 12345678 (creates 12345678.${parentHint}).`
       ].join(" ")
@@ -26,4 +30,3 @@ export function validateSingleLabelInput(label: string, parentName?: string): vo
     );
   }
 }
-
