@@ -1,22 +1,12 @@
 import { network } from "hardhat";
+import { readFlagValue, hasFlag } from "./utils/cli-flags.js";
 import { validateSingleLabelInput } from "./utils/label-input.js";
 
 const MAINNET_CHAIN_ID = 1n;
 
-function hasFlag(name: string): boolean {
-  return process.argv.includes(`--${name}`);
-}
-
-function readFlag(name: string): string | undefined {
-  const key = `--${name}`;
-  const index = process.argv.indexOf(key);
-  if (index === -1) return undefined;
-  return process.argv[index + 1];
-}
-
 function resolveParentNode(ethersLib: typeof import("ethers")): string {
-  const parentNode = readFlag("parent-node") || process.env.PARENT_NODE;
-  const parentName = readFlag("parent-name") || process.env.PARENT_NAME;
+  const parentNode = readFlagValue(process.argv, "parent-node") || process.env.PARENT_NODE;
+  const parentName = readFlagValue(process.argv, "parent-name") || process.env.PARENT_NAME;
 
   if (parentNode) {
     if (!ethersLib.isHexString(parentNode, 32)) {
@@ -30,7 +20,7 @@ function resolveParentNode(ethersLib: typeof import("ethers")): string {
 }
 
 function parseRecords(ethersLib: typeof import("ethers")): string[] {
-  const raw = readFlag("records") || process.env.RECORDS_JSON || "[]";
+  const raw = readFlagValue(process.argv, "records") || process.env.RECORDS_JSON || "[]";
   let value: unknown;
 
   try {
@@ -65,7 +55,7 @@ function requireAddress(name: string, value: string | undefined, ethersLib: type
 }
 
 async function main() {
-  if (hasFlag("help")) {
+  if (hasFlag(process.argv, "help")) {
     printUsage();
     return;
   }
@@ -76,8 +66,8 @@ async function main() {
     throw new Error(`This script is mainnet-only. Connected chainId=${chainId.toString()}.`);
   }
 
-  const registrarAddress = requireAddress("REGISTRAR_ADDRESS", readFlag("registrar") || process.env.REGISTRAR_ADDRESS, ethers);
-  const label = readFlag("label") || process.env.LABEL;
+  const registrarAddress = requireAddress("REGISTRAR_ADDRESS", readFlagValue(process.argv, "registrar") || process.env.REGISTRAR_ADDRESS, ethers);
+  const label = readFlagValue(process.argv, "label") || process.env.LABEL;
 
   if (!label) {
     printUsage();
@@ -92,11 +82,11 @@ async function main() {
   }
 
   const parentNode = resolveParentNode(ethers);
-  const parentName = readFlag("parent-name") || process.env.PARENT_NAME;
-  const newOwner = requireAddress("NEW_OWNER", readFlag("owner") || process.env.NEW_OWNER || signerAddress, ethers);
-  const resolverRaw = readFlag("resolver") || process.env.RESOLVER || ethers.ZeroAddress;
+  const parentName = readFlagValue(process.argv, "parent-name") || process.env.PARENT_NAME;
+  const newOwner = requireAddress("NEW_OWNER", readFlagValue(process.argv, "owner") || process.env.NEW_OWNER || signerAddress, ethers);
+  const resolverRaw = readFlagValue(process.argv, "resolver") || process.env.RESOLVER || ethers.ZeroAddress;
   const resolver = requireAddress("RESOLVER", resolverRaw, ethers);
-  const ownerControlledFusesRaw = readFlag("fuses") || process.env.OWNER_CONTROLLED_FUSES || "0";
+  const ownerControlledFusesRaw = readFlagValue(process.argv, "fuses") || process.env.OWNER_CONTROLLED_FUSES || "0";
   const ownerControlledFuses = Number(ownerControlledFusesRaw);
   const records = parseRecords(ethers);
 

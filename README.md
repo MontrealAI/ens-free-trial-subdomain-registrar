@@ -197,6 +197,7 @@ Safety rules:
 - `Unavailable`: subname already exists and is not expired.
 - Script error `This script is mainnet-only`: your RPC endpoint or network config is not chain id 1.
 - Script error `No contract code found at REGISTRAR_ADDRESS`: wrong contract address or wrong network.
+- Script error `Flag --<name> requires a value.`: a CLI flag was provided without its value (for example, `--label` with no label string).
 
 ## 10) Mainnet deployment checklist
 
