@@ -162,6 +162,35 @@ describe("FreeTrialSubdomainRegistrar", function () {
     ).to.be.revertedWithCustomError(registrar, "InvalidLabelCharacter");
   });
 
+  it("rejects overly long labels", async function () {
+    const { registrar, wrapper, parentNode, now, user } = await deployFixture();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
+
+    const tooLong = "a".repeat(64);
+    await expect(
+      registrar.register(parentNode, tooLong, user.address, ethers.ZeroAddress, 0, [])
+    ).to.be.revertedWithCustomError(registrar, "LabelTooLong");
+  });
+
+  it("validateLabel mirrors onchain constraints", async function () {
+    const { registrar } = await deployFixture();
+
+    expect(await registrar.validateLabel("trialpass8")).to.equal(true);
+    expect(await registrar.validateLabel("SHORT7")).to.equal(false);
+    expect(await registrar.validateLabel("invalid-8")).to.equal(false);
+    expect(await registrar.validateLabel("short7")).to.equal(false);
+    expect(await registrar.validateLabel("a".repeat(64))).to.equal(false);
+  });
+
+  it("rejects non-contract resolver", async function () {
+    const { registrar, wrapper, parentNode, now, user } = await deployFixture();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
+
+    await expect(
+      registrar.register(parentNode, "trialpass8", user.address, user.address, 0, [])
+    ).to.be.revertedWithCustomError(registrar, "ResolverNotContract");
+  });
+
   it("caps child expiry to parent effective expiry when parent has less than 30 days", async function () {
     const { registrar, wrapper, parentNode, now, user } = await deployFixture();
     const parentExpiry = now + (10n * 24n * 60n * 60n);

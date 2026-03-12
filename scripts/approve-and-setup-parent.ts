@@ -46,6 +46,16 @@ async function main() {
     throw new Error(`This script is mainnet-only. Connected chainId=${chainId.toString()}.`);
   }
 
+  const wrapperCode = await ethers.provider.getCode(wrapperAddress);
+  if (wrapperCode === "0x") {
+    throw new Error(`ENS_NAME_WRAPPER=${wrapperAddress} has no contract bytecode on mainnet.`);
+  }
+
+  const registrarCode = await ethers.provider.getCode(registrarAddress);
+  if (registrarCode === "0x") {
+    throw new Error(`REGISTRAR_ADDRESS=${registrarAddress} has no contract bytecode on mainnet.`);
+  }
+
   const [signer] = await ethers.getSigners();
   const signerAddress = await signer.getAddress();
   const signerBalance = await ethers.provider.getBalance(signerAddress);
