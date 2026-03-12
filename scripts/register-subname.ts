@@ -122,6 +122,18 @@ async function main() {
     throw new Error("Invalid label. Use lowercase letters and numbers only, length 8 to 63.");
   }
 
+  const parentActive = await registrar.activeParents(parentNode);
+  if (!parentActive) {
+    throw new Error("Parent is not active in this registrar. Ask the operator to run setup:parent:mainnet first.");
+  }
+
+  const labelhash = ethers.keccak256(ethers.toUtf8Bytes(label));
+  const node = ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, labelhash]));
+  const currentlyAvailable = await registrar.available(node);
+  if (!currentlyAvailable) {
+    throw new Error(`Requested subname is unavailable right now: ${node}`);
+  }
+
   const expiry = await registrar.nextExpiry(parentNode);
   const expiryDate = new Date(Number(expiry) * 1000).toISOString();
 
@@ -140,9 +152,6 @@ async function main() {
   const tx = await registrar.register(parentNode, label, newOwner, resolver, ownerControlledFuses, records);
   await tx.wait();
 
-  const node = ethers.keccak256(
-    ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes(label))])
-  );
 
   console.log("Done.");
   console.log(`Subname node: ${node}`);
