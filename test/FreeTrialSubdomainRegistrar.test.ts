@@ -408,11 +408,11 @@ describe("FreeTrialSubdomainRegistrar", function () {
 
     await expect(
       registrar.register(parentNode, "ethereum.12345678", user.address, ethers.ZeroAddress, 0, [])
-    ).to.be.revertedWithCustomError(registrar, "InvalidLabelCharacter");
+    ).to.be.revertedWithCustomError(registrar, "DottedLabelNotAllowed");
 
     await expect(
       registrar.register(parentNode, "12345678.alpha.agent.agi.eth", user.address, ethers.ZeroAddress, 0, [])
-    ).to.be.revertedWithCustomError(registrar, "InvalidLabelCharacter");
+    ).to.be.revertedWithCustomError(registrar, "DottedLabelNotAllowed");
   });
 
   it("label validation property: random labels accepted iff [a-z0-9]{8,63}", async function () {
@@ -506,6 +506,37 @@ describe("FreeTrialSubdomainRegistrar", function () {
     await expect(
       (registrar.connect(user) as any).removeParent(parentNode)
     ).to.be.revertedWithCustomError(registrar, "Unauthorised");
+  });
+
+
+  it("deactivation/removal do not retroactively invalidate already-issued subnames", async function () {
+    const { registrar, wrapper, parentNode, user } = await deployFixture();
+    const now = await latestTimestamp();
+
+    await wrapper.setNameData(parentNode, await wrapper.getAddress(), Number(CANNOT_UNWRAP), Number(now + THIRTY_DAYS + 1000n), true);
+    await wrapper.setCanModify(parentNode, await registrar.getAddress(), true);
+    await wrapper.setCanModify(parentNode, (await ethers.getSigners())[0].address, true);
+
+    await registrar.activateParent(parentNode);
+    await registrar.registerSimple(parentNode, "12345678", user.address);
+
+    const childNode = ethers.keccak256(
+      ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("12345678"))])
+    );
+
+    const [ownerBefore, , expiryBefore] = await wrapper.getData(childNode);
+    expect(ownerBefore).to.equal(user.address);
+
+    await registrar.deactivateParent(parentNode);
+    const [ownerAfterDeactivate, , expiryAfterDeactivate] = await wrapper.getData(childNode);
+    expect(ownerAfterDeactivate).to.equal(user.address);
+    expect(BigInt(expiryAfterDeactivate)).to.equal(BigInt(expiryBefore));
+
+    await registrar.activateParent(parentNode);
+    await registrar.removeParent(parentNode);
+    const [ownerAfterRemove, , expiryAfterRemove] = await wrapper.getData(childNode);
+    expect(ownerAfterRemove).to.equal(user.address);
+    expect(BigInt(expiryAfterRemove)).to.equal(BigInt(expiryBefore));
   });
 
   it("getParentStatus reports non-reverting status helpers", async function () {

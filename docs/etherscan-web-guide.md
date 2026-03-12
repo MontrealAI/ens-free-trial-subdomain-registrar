@@ -27,10 +27,13 @@ Forbidden:
 
 If you accidentally pass a full ENS name as the label, the transaction must fail.
 
-## Step 1: open the registrar on Etherscan
+## Step 1: find/copy the parent node and open the registrar
 
-1. Open your registrar contract address on Etherscan.
-2. Go to **Contract -> Write Contract** and connect the wallet that can modify the wrapped parent.
+1. Compute/copy the parent node for `alpha.agent.agi.eth`:
+   - ENS app manager tools or CLI (`ethers.namehash("alpha.agent.agi.eth")`) should return
+     `0xc74b6c5e8a0d97ed1fe28755da7d06a84593b4de92f6582327bc40f41d6c2d5e`.
+2. Open your registrar contract address on Etherscan.
+3. Go to **Contract -> Write Contract** and connect the wallet that can modify the wrapped parent.
 
 ## Step 2: confirm parent readiness (read functions)
 
@@ -93,6 +96,7 @@ Already-issued subnames are **not** retroactively invalidated by this registrar.
 - `RegistrarNotAuthorised`: approve registrar on NameWrapper.
 - `ParentExpired`: parent effective expiry already passed.
 - `ParentNameNotActive`: activate parent first.
+- `DottedLabelNotAllowed`: you passed a dotted label/full ENS name; pass one label only (for example `12345678`).
 - `InvalidLabelCharacter` or `LabelTooShort`: fix label format.
 
 Human-friendly reminder:

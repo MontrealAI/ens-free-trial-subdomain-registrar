@@ -44,6 +44,7 @@ error ResolverRequired();
 error ResolverNotContract(address resolver);
 error LabelTooShort(uint256 length);
 error LabelTooLong(uint256 length);
+error DottedLabelNotAllowed(uint256 index);
 error InvalidLabelCharacter(uint256 index, bytes1 character);
 error EtherNotAccepted();
 error RecordNamehashMismatch(bytes32 expectedNode, bytes32 providedNode);
@@ -246,7 +247,8 @@ contract FreeTrialSubdomainRegistrar is ERC1155Holder, ReentrancyGuard {
         }
     }
 
-    /// @notice Pure label validator for frontends and scripts (rejects dots/full names by charset rules).
+    /// @notice Pure label validator for frontends and scripts.
+    /// @dev Labels must be exactly one first-degree label: lowercase alphanumeric, 8-63 chars, no dots.
     function validateLabel(string calldata label) external pure returns (bool) {
         return _isValidLabel(label);
     }
@@ -316,6 +318,9 @@ contract FreeTrialSubdomainRegistrar is ERC1155Holder, ReentrancyGuard {
 
         for (uint256 i = 0; i < length; ) {
             bytes1 character = labelBytes[i];
+            if (character == 0x2e) {
+                revert DottedLabelNotAllowed(i);
+            }
             bool isNumber = character >= 0x30 && character <= 0x39;
             bool isLowerAlpha = character >= 0x61 && character <= 0x7A;
 
