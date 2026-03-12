@@ -136,6 +136,8 @@ One-command alternative (deploy + verify):
 npm run deploy-and-verify:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
 ```
 
+Any flags after `--` are forwarded to the deploy step (for example `--confirm-mainnet`).
+
 ### Step B — Lock parent in ENS Manager
 
 Burn `CANNOT_UNWRAP` on the wrapped parent.

@@ -14,7 +14,7 @@
     "ci": "npm run build && npm run test && npm run typecheck",
     "clean": "hardhat clean",
     "deploy:mainnet": "hardhat run scripts/deploy-mainnet.ts --network mainnet",
-    "deploy-and-verify:mainnet": "npm run deploy:mainnet && node -e \"const fs=require('fs');const path=require('path');const dir=path.join(process.cwd(),'deployments','mainnet');const files=fs.readdirSync(dir).filter(f=>f.startsWith('FreeTrialSubdomainRegistrar-')&&f.endsWith('.json'));if(!files.length){throw new Error('No deployment manifest found in deployments/mainnet');}files.sort((a,b)=>fs.statSync(path.join(dir,b)).mtimeMs-fs.statSync(path.join(dir,a)).mtimeMs);const manifestPath=path.join(dir,files[0]);console.log('Using manifest:',manifestPath);const manifest=JSON.parse(fs.readFileSync(manifestPath,'utf8'));if(!manifest.contractAddress){throw new Error('Manifest missing contractAddress');}process.exit(require('child_process').spawnSync(process.platform==='win32'?'npm.cmd':'npm',['run','verify:mainnet','--','--address',manifest.contractAddress,'--manifest',manifestPath],{stdio:'inherit'}).status??1);\"",
+    "deploy-and-verify:mainnet": "node scripts/deploy-and-verify-mainnet.js",
     "doctor:mainnet": "hardhat run scripts/mainnet-doctor.ts --network mainnet",
     "register:mainnet": "hardhat run scripts/register-subname.ts --network mainnet",
     "setup:parent:mainnet": "hardhat run scripts/approve-and-setup-parent.ts --network mainnet",
