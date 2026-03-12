@@ -2,6 +2,7 @@ import { network } from "hardhat";
 import { readFlagValue, hasFlag } from "./utils/cli-flags.js";
 import { validateSingleLabelInput } from "./utils/label-input.js";
 import { resolveParentNodeInput } from "./utils/parent-input.js";
+import { requireMainnetBroadcastConfirmation } from "./utils/mainnet-safety.js";
 
 const MAINNET_CHAIN_ID = 1n;
 
@@ -24,13 +25,14 @@ function parseRecords(ethersLib: typeof import("ethers")): string[] {
 
 function printUsage(): void {
   console.log(`Usage:
-  npm run register:mainnet -- --registrar 0x... --parent-name alpha.agent.agi.eth --label 12345678 [--owner 0x...] [--resolver 0x...] [--fuses 0] [--records "[]"]
+  npm run register:mainnet -- --registrar 0x... --parent-name alpha.agent.agi.eth --label 12345678 [--owner 0x...] [--resolver 0x...] [--fuses 0] [--records "[]"] --confirm-mainnet I_UNDERSTAND_MAINNET
 
 Important: --label is one label only (first-degree).
 Example: --label ethereum creates ethereum.alpha.agent.agi.eth
 Do not pass full names to --label (forbidden: --label ethereum.alpha.agent.agi.eth).
 
-Flags can also be provided through .env (see .env.example).`);
+Flags can also be provided through .env (see .env.example).
+Mainnet safety: requires --confirm-mainnet I_UNDERSTAND_MAINNET (or MAINNET_CONFIRM env).`);
 }
 
 function requireAddress(name: string, value: string | undefined, ethersLib: typeof import("ethers")): string {
@@ -45,6 +47,8 @@ async function main() {
     printUsage();
     return;
   }
+
+  requireMainnetBroadcastConfirmation(process.argv, "broadcast a subname registration transaction");
 
   const { ethers, networkName } = await network.connect();
   const chainId = (await ethers.provider.getNetwork()).chainId;
@@ -122,6 +126,7 @@ async function main() {
   const expiryDate = new Date(Number(expiry) * 1000).toISOString();
 
   console.log(`Network: ${networkName}`);
+  console.log(`Chain ID: ${chainId.toString()}`);
   console.log(`Registrar: ${registrarAddress}`);
   console.log(`Parent node: ${parentNode}`);
   if (normalizedParentName) console.log(`Parent name: ${normalizedParentName}`);

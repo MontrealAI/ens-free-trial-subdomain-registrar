@@ -55,7 +55,7 @@ PARENT_NAME=alpha.agent.agi.eth
 ## 1) Deploy registrar
 
 ```bash
-npm run deploy:mainnet
+npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
 ```
 
 Copy printed `Registrar address` into `.env`:
@@ -69,7 +69,7 @@ REGISTRAR_ADDRESS=0xYourRegistrarAddress
 Before this step, in ENS Manager ensure the wrapped parent is locked (`CANNOT_UNWRAP` burned).
 
 ```bash
-PARENT_NAME=alpha.agent.agi.eth ACTIVE=true npm run setup:parent:mainnet
+PARENT_NAME=alpha.agent.agi.eth ACTIVE=true npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
 ```
 
 ## 3) Register `12345678.alpha.agent.agi.eth`
@@ -79,7 +79,8 @@ npm run register:mainnet -- \
   --registrar 0xYourRegistrarAddress \
   --parent-name alpha.agent.agi.eth \
   --label 12345678 \
-  --owner 0xRecipientAddress
+  --owner 0xRecipientAddress \
+  --confirm-mainnet I_UNDERSTAND_MAINNET
 ```
 
 ## 4) Register `ethereum.alpha.agent.agi.eth`
@@ -89,8 +90,21 @@ npm run register:mainnet -- \
   --registrar 0xYourRegistrarAddress \
   --parent-name alpha.agent.agi.eth \
   --label ethereum \
-  --owner 0xRecipientAddress
+  --owner 0xRecipientAddress \
+  --confirm-mainnet I_UNDERSTAND_MAINNET
 ```
+
+---
+
+
+## Mainnet confirmation guard
+
+All state-changing scripts fail closed unless you provide one of:
+
+- `--confirm-mainnet I_UNDERSTAND_MAINNET`
+- `MAINNET_CONFIRM=I_UNDERSTAND_MAINNET`
+
+This is intentional to reduce accidental mainnet broadcasts.
 
 ---
 
@@ -165,5 +179,5 @@ Use lowercase `a-z` and digits `0-9` only.
 Run:
 
 ```bash
-PARENT_NAME=alpha.agent.agi.eth ACTIVE=true npm run setup:parent:mainnet
+PARENT_NAME=alpha.agent.agi.eth ACTIVE=true npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
 ```
