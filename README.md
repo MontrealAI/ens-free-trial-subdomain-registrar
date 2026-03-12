@@ -107,6 +107,18 @@ ACTIVE=true
 
 ## 7) Mainnet runbook
 
+### Step 0 — Optional read-only doctor preflight
+
+```bash
+npm run doctor:mainnet -- --help
+```
+
+Recommended full preflight (no transactions sent):
+
+```bash
+npm run doctor:mainnet -- --registrar 0xYourRegistrar --parent-name example.eth --label trialpass8
+```
+
 ### Step A — Deploy
 
 ```bash
@@ -174,6 +186,11 @@ Get CLI help:
 npm run register:mainnet -- --help
 ```
 
+Doctor CLI help:
+
+```bash
+npm run doctor:mainnet -- --help
+```
 
 ### Mainnet confirmation gate (all state-changing scripts)
 

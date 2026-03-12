@@ -17,7 +17,8 @@
     "register:mainnet": "hardhat run scripts/register-subname.ts --build-profile production --network mainnet",
     "verify:mainnet": "hardhat verify --build-profile production --network mainnet",
     "typecheck": "tsc --noEmit",
-    "ci": "npm run build && npm run test && npm run typecheck"
+    "ci": "npm run build && npm run test && npm run typecheck",
+    "doctor:mainnet": "hardhat run scripts/mainnet-doctor.ts --build-profile production --network mainnet"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.0",

@@ -52,7 +52,15 @@ ETHERSCAN_API_KEY=...
 PARENT_NAME=alpha.agent.agi.eth
 ```
 
-## 1) Deploy registrar
+## 1) Optional read-only doctor preflight
+
+```bash
+npm run doctor:mainnet -- --registrar 0xYourRegistrarAddress --parent-name alpha.agent.agi.eth --label 12345678
+```
+
+This check is read-only and helps catch wrong network/address/label inputs before any write operation.
+
+## 2) Deploy registrar
 
 ```bash
 npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
@@ -64,7 +72,7 @@ Copy printed `Registrar address` into `.env`:
 REGISTRAR_ADDRESS=0xYourRegistrarAddress
 ```
 
-## 2) Approve and activate parent
+## 3) Approve and activate parent
 
 Before this step, in ENS Manager ensure the wrapped parent is locked (`CANNOT_UNWRAP` burned).
 
@@ -72,7 +80,7 @@ Before this step, in ENS Manager ensure the wrapped parent is locked (`CANNOT_UN
 PARENT_NAME=alpha.agent.agi.eth ACTIVE=true npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
 ```
 
-## 3) Register `12345678.alpha.agent.agi.eth`
+## 4) Register `12345678.alpha.agent.agi.eth`
 
 ```bash
 npm run register:mainnet -- \
@@ -83,7 +91,7 @@ npm run register:mainnet -- \
   --confirm-mainnet I_UNDERSTAND_MAINNET
 ```
 
-## 4) Register `ethereum.alpha.agent.agi.eth`
+## 5) Register `ethereum.alpha.agent.agi.eth`
 
 ```bash
 npm run register:mainnet -- \

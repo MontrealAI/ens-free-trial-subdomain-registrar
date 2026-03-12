@@ -16,6 +16,7 @@
 - Deploy registrar (mainnet): `npm run deploy:mainnet`
 - Approve + activate/deactivate parent: `npm run setup:parent:mainnet`
 - Register subname: `npm run register:mainnet -- --help`
+- Read-only mainnet preflight: `npm run doctor:mainnet -- --help`
 
 ## Product invariants (non-negotiable)
 1. Free-trial ENS registrar; registration stays free.
