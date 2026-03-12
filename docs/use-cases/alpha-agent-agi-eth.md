@@ -77,7 +77,7 @@ REGISTRAR_ADDRESS=0xYourRegistrarAddress
 Before this step, in ENS Manager ensure the wrapped parent is locked (`CANNOT_UNWRAP` burned).
 
 ```bash
-PARENT_NAME=alpha.agent.agi.eth ACTIVE=true npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
+PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate
 ```
 
 ## 4) Register `12345678.alpha.agent.agi.eth`
@@ -104,6 +104,25 @@ npm run register:mainnet -- \
 
 ---
 
+
+
+## 6) Stop new free minting on this parent
+
+Deactivate (reversible):
+
+```bash
+PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action deactivate
+```
+
+Remove config (also blocks new mints):
+
+```bash
+PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action remove
+```
+
+Existing issued subnames remain valid until their current expiry. These actions stop **new** mints only.
+
+---
 
 ## Mainnet confirmation guard
 
@@ -187,5 +206,5 @@ Use lowercase `a-z` and digits `0-9` only.
 Run:
 
 ```bash
-PARENT_NAME=alpha.agent.agi.eth ACTIVE=true npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
+PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate
 ```
