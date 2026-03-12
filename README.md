@@ -21,6 +21,8 @@ This ensures:
 - child never receives its own grace period,
 - `.eth` grace only affects parent-cap calculations.
 
+> ⚠️ Mainnet safety: this repository intentionally treats every state-changing script as **mainnet-only** and fails if connected to the wrong chain id.
+
 ## 2) Security model and invariants
 
 - Parent must be wrapped and locked (`CANNOT_UNWRAP` burned on the parent).
@@ -110,6 +112,12 @@ Burn `CANNOT_UNWRAP` on the wrapped parent.
 npm run setup:parent:mainnet
 ```
 
+Script safety checks include:
+- strict `chainId == 1`
+- non-zero signer ETH balance
+- parent lock validation before activation
+- registrar approval checks against NameWrapper
+
 Deactivate later with:
 
 ```bash
@@ -125,6 +133,13 @@ npm run register:mainnet -- \
   --label trialpass8 \
   --owner 0xRecipient
 ```
+
+Script safety checks include:
+- strict `chainId == 1`
+- non-zero signer ETH balance
+- `REGISTRAR_ADDRESS` must contain deployed bytecode
+- `PARENT_NODE` must be a 32-byte hex node if provided directly
+- onchain label validation preview before submitting tx
 
 Get CLI help:
 
@@ -156,6 +171,8 @@ Safety rules:
 - `ParentExpired`: parent effective expiry already passed.
 - `InvalidLabelCharacter` / `LabelTooShort`: label must match `[a-z0-9]{8,63}`.
 - `Unavailable`: subname already exists and is not expired.
+- Script error `This script is mainnet-only`: your RPC endpoint or network config is not chain id 1.
+- Script error `No contract code found at REGISTRAR_ADDRESS`: wrong contract address or wrong network.
 
 ## 10) Mainnet deployment checklist
 
