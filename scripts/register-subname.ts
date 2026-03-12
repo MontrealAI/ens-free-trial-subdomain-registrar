@@ -1,5 +1,12 @@
 import { network } from "hardhat";
 
+const LABEL_REGEX = /^[a-z0-9]{8,63}$/;
+
+function printUsageAndExit(): never {
+  console.log(`\nUsage:\n  npm run register:mainnet -- --registrar <address> --parent-name <name.eth>|--parent-node <bytes32> --label <label> [--owner <address>] [--resolver <address>] [--fuses <0-65535>] [--records '["0x..."]']\n`);
+  process.exit(0);
+}
+
 function readFlag(name: string): string | undefined {
   const key = `--${name}`;
   const index = process.argv.indexOf(key);
@@ -11,7 +18,12 @@ function resolveParentNode(ethersLib: typeof import("ethers")): string {
   const parentNode = readFlag("parent-node") || process.env.PARENT_NODE;
   const parentName = readFlag("parent-name") || process.env.PARENT_NAME;
 
-  if (parentNode) return parentNode;
+  if (parentNode) {
+    if (!ethersLib.isHexString(parentNode, 32)) {
+      throw new Error("parent-node / PARENT_NODE must be a bytes32 hex value.");
+    }
+    return parentNode;
+  }
   if (parentName) return ethersLib.namehash(parentName);
 
   throw new Error("Provide --parent-name, --parent-node, PARENT_NAME, or PARENT_NODE.");
@@ -44,6 +56,10 @@ function requireAddress(name: string, value: string | undefined, ethersLib: type
 const { ethers, networkName } = await network.connect();
 
 async function main() {
+  if (process.argv.includes("--help") || process.argv.includes("-h")) {
+    printUsageAndExit();
+  }
+
   const registrarAddress = requireAddress("REGISTRAR_ADDRESS", readFlag("registrar") || process.env.REGISTRAR_ADDRESS, ethers);
   const label = readFlag("label") || process.env.LABEL;
 
@@ -65,7 +81,12 @@ async function main() {
     throw new Error("ownerControlledFuses must be an integer between 0 and 65535.");
   }
 
+  if (!LABEL_REGEX.test(label)) {
+    throw new Error("Invalid label format. Use lowercase letters and numbers only, length 8 to 63.");
+  }
+
   const registrar = await ethers.getContractAt("FreeTrialSubdomainRegistrar", registrarAddress, signer);
+  const chainId = (await ethers.provider.getNetwork()).chainId;
 
   const isValid = await registrar.validateLabel(label);
   if (!isValid) {
@@ -76,6 +97,7 @@ async function main() {
   const expiryDate = new Date(Number(expiry) * 1000).toISOString();
 
   console.log(`Network: ${networkName}`);
+  console.log(`Chain ID: ${chainId.toString()}`);
   console.log(`Registrar: ${registrarAddress}`);
   console.log(`Parent node: ${parentNode}`);
   if (parentName) console.log(`Parent name: ${parentName}`);
@@ -88,6 +110,7 @@ async function main() {
 
   console.log("Submitting registration transaction (no ETH should be sent)...");
   const tx = await registrar.register(parentNode, label, newOwner, resolver, ownerControlledFuses, records);
+  console.log(`Transaction hash: ${tx.hash}`);
   await tx.wait();
 
   const node = ethers.keccak256(
