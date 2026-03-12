@@ -110,10 +110,10 @@ ACTIVE=true
 ### Step A — Deploy
 
 ```bash
-npm run deploy:mainnet
+npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
 ```
 
-Script checks mainnet chain id and prints next actions.
+Script checks mainnet chain id, requires explicit mainnet confirmation, and writes a deployment manifest under `deployments/mainnet/`.
 
 ### Step B — Lock parent in ENS Manager
 
@@ -122,11 +122,12 @@ Burn `CANNOT_UNWRAP` on the wrapped parent.
 ### Step C — Approve and activate parent
 
 ```bash
-npm run setup:parent:mainnet
+npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
 ```
 
 Script safety checks include:
 - strict `chainId == 1`
+- explicit `--confirm-mainnet I_UNDERSTAND_MAINNET` (or `MAINNET_CONFIRM`) gate before broadcast
 - ENS NameWrapper and registrar bytecode existence checks
 - non-zero signer ETH balance
 - parent lock validation before activation
@@ -135,7 +136,7 @@ Script safety checks include:
 Deactivate later with:
 
 ```bash
-ACTIVE=false npm run setup:parent:mainnet
+ACTIVE=false npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
 ```
 
 ### Step D — Register subname
@@ -145,7 +146,8 @@ npm run register:mainnet -- \
   --registrar 0xYourRegistrar \
   --parent-name example.eth \
   --label trialpass8 \
-  --owner 0xRecipient
+  --owner 0xRecipient \
+  --confirm-mainnet I_UNDERSTAND_MAINNET
 ```
 
 Important: `--label` is first-degree only.
@@ -171,6 +173,16 @@ Get CLI help:
 ```bash
 npm run register:mainnet -- --help
 ```
+
+
+### Mainnet confirmation gate (all state-changing scripts)
+
+To reduce accidental mainnet writes, deployment/setup/register scripts require an explicit confirmation phrase:
+
+- CLI flag: `--confirm-mainnet I_UNDERSTAND_MAINNET`
+- or env: `MAINNET_CONFIRM=I_UNDERSTAND_MAINNET`
+
+Scripts fail closed if this confirmation is missing.
 
 ### Step E — Verify contract
 

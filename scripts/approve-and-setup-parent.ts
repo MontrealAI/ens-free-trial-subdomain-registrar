@@ -1,5 +1,9 @@
 import { network } from "hardhat";
 
+import { readFlagValue } from "./utils/cli-flags.js";
+import { resolveParentNodeInput } from "./utils/parent-input.js";
+import { requireMainnetBroadcastConfirmation } from "./utils/mainnet-safety.js";
+
 const MAINNET_CHAIN_ID = 1;
 const DEFAULT_WRAPPER = "0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401";
 const CANNOT_UNWRAP = 1n;
@@ -11,21 +15,6 @@ const WRAPPER_ABI = [
   "function getData(uint256 id) external view returns (address owner, uint32 fuses, uint64 expiry)"
 ] as const;
 
-function resolveParentNode(ethersLib: typeof import("ethers")): string {
-  const parentNode = process.env.PARENT_NODE;
-  const parentName = process.env.PARENT_NAME;
-
-  if (parentNode) {
-    if (!ethersLib.isHexString(parentNode, 32)) {
-      throw new Error("PARENT_NODE must be a 32-byte hex value.");
-    }
-    return parentNode;
-  }
-  if (parentName) return ethersLib.namehash(parentName);
-
-  throw new Error("Set PARENT_NAME or PARENT_NODE in your environment.");
-}
-
 function requireAddress(name: string, value: string | undefined, ethersLib: typeof import("ethers")): string {
   if (!value || !ethersLib.isAddress(value)) {
     throw new Error(`${name} must be set to a valid address.`);
@@ -33,14 +22,44 @@ function requireAddress(name: string, value: string | undefined, ethersLib: type
   return value;
 }
 
+function printUsage(): void {
+  console.log(`Usage:
+  npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET [--active true|false] [--parent-name example.eth | --parent-node 0x...]
+
+Required inputs:
+  REGISTRAR_ADDRESS=0x... (or --registrar is not supported in this script)
+
+Optional inputs:
+  ENS_NAME_WRAPPER=0x... (defaults to mainnet NameWrapper)
+  ACTIVE=true|false (default true)
+  MAINNET_CONFIRM=I_UNDERSTAND_MAINNET (env alternative)
+
+Safety notes:
+  - Activation requires parent to be wrapped, locked (CANNOT_UNWRAP burned), and registrar-approved.
+  - If both parent name and parent node are supplied, they must match exactly.`);
+}
+
 const { ethers, networkName } = await network.connect();
 
 async function main() {
+  if (process.argv.includes("--help")) {
+    printUsage();
+    return;
+  }
+
+  requireMainnetBroadcastConfirmation(process.argv, "broadcast parent setup transactions");
+
   const wrapperAddress = requireAddress("ENS_NAME_WRAPPER", process.env.ENS_NAME_WRAPPER || DEFAULT_WRAPPER, ethers);
   const registrarAddress = requireAddress("REGISTRAR_ADDRESS", process.env.REGISTRAR_ADDRESS, ethers);
-  const active = (process.env.ACTIVE || "true").toLowerCase() === "true";
-  const parentNode = resolveParentNode(ethers);
-  const parentName = process.env.PARENT_NAME;
+  const activeRaw = readFlagValue(process.argv, "active") || process.env.ACTIVE || "true";
+  const active = activeRaw.toLowerCase() === "true";
+  if (!["true", "false"].includes(activeRaw.toLowerCase())) {
+    throw new Error(`ACTIVE / --active must be true or false. Received: ${activeRaw}`);
+  }
+
+  const parentNodeInput = readFlagValue(process.argv, "parent-node") || process.env.PARENT_NODE;
+  const parentNameInput = readFlagValue(process.argv, "parent-name") || process.env.PARENT_NAME;
+  const { parentNode, normalizedParentName } = resolveParentNodeInput(ethers, parentNodeInput, parentNameInput);
 
   const chainId = (await ethers.provider.getNetwork()).chainId;
   if (chainId !== BigInt(MAINNET_CHAIN_ID)) {
@@ -80,9 +99,11 @@ async function main() {
   const signerIsParentOwner = parentOwner.toLowerCase() === signerAddress.toLowerCase();
 
   console.log(`Network: ${networkName}`);
+  console.log(`Chain ID: ${chainId.toString()}`);
   console.log(`Signer: ${signerAddress}`);
   console.log(`Signer ETH balance: ${ethers.formatEther(signerBalance)} ETH`);
   console.log(`Parent node: ${parentNode}`);
+  if (normalizedParentName) console.log(`Parent name: ${normalizedParentName}`);
   console.log(`Wrapped parent owner: ${parentOwner}`);
   console.log(`Parent locked: ${parentLocked}`);
   console.log(`Registrar: ${registrarAddress}`);
@@ -103,7 +124,7 @@ async function main() {
     console.log("Approving registrar via NameWrapper.setApprovalForAll...");
     const approveTx = await wrapper.setApprovalForAll(registrarAddress, true);
     await approveTx.wait();
-    console.log("Approval confirmed.");
+    console.log(`Approval confirmed in tx ${approveTx.hash}.`);
   } else {
     console.log("Registrar already approved on NameWrapper by wrapped parent owner.");
   }
@@ -113,12 +134,13 @@ async function main() {
   await setupTx.wait();
 
   console.log(`Parent active = ${active}`);
+  console.log(`setupDomain tx hash: ${setupTx.hash}`);
   console.log("Done.");
   if (active) {
     console.log("Next steps:");
-    if (parentName) {
+    if (normalizedParentName) {
       console.log(
-        `1) Register a first-degree label only, e.g. --parent-name ${parentName} --label 12345678 (creates 12345678.${parentName}).`
+        `1) Register a first-degree label only, e.g. --parent-name ${normalizedParentName} --label 12345678 (creates 12345678.${normalizedParentName}).`
       );
     } else {
       console.log("1) Register a first-degree label only (single label, no dots). Example: --label 12345678.");
