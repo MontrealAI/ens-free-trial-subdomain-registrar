@@ -1,5 +1,6 @@
 import { network } from "hardhat";
 
+const MAINNET_CHAIN_ID = 1;
 const DEFAULT_WRAPPER = "0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401";
 const CANNOT_UNWRAP = 1n;
 
@@ -14,24 +15,32 @@ function resolveParentNode(ethersLib: typeof import("ethers")): string {
   const parentNode = process.env.PARENT_NODE;
   const parentName = process.env.PARENT_NAME;
 
-  if (parentNode && parentNode !== "") return parentNode;
-  if (parentName && parentName !== "") return ethersLib.namehash(parentName);
+  if (parentNode) return parentNode;
+  if (parentName) return ethersLib.namehash(parentName);
 
   throw new Error("Set PARENT_NAME or PARENT_NODE in your environment.");
+}
+
+function requireAddress(name: string, value: string | undefined, ethersLib: typeof import("ethers")): string {
+  if (!value || !ethersLib.isAddress(value)) {
+    throw new Error(`${name} must be set to a valid address.`);
+  }
+  return value;
 }
 
 const { ethers, networkName } = await network.connect();
 
 async function main() {
-  const wrapperAddress = process.env.ENS_NAME_WRAPPER || DEFAULT_WRAPPER;
-  const registrarAddress = process.env.REGISTRAR_ADDRESS;
+  const wrapperAddress = requireAddress("ENS_NAME_WRAPPER", process.env.ENS_NAME_WRAPPER || DEFAULT_WRAPPER, ethers);
+  const registrarAddress = requireAddress("REGISTRAR_ADDRESS", process.env.REGISTRAR_ADDRESS, ethers);
   const active = (process.env.ACTIVE || "true").toLowerCase() === "true";
+  const parentNode = resolveParentNode(ethers);
 
-  if (!registrarAddress) {
-    throw new Error("Set REGISTRAR_ADDRESS in your environment.");
+  const chainId = (await ethers.provider.getNetwork()).chainId;
+  if (chainId !== BigInt(MAINNET_CHAIN_ID)) {
+    throw new Error(`This script is mainnet-only. Connected chainId=${chainId.toString()}.`);
   }
 
-  const parentNode = resolveParentNode(ethers);
   const [signer] = await ethers.getSigners();
   const signerAddress = await signer.getAddress();
 
@@ -40,8 +49,7 @@ async function main() {
 
   const [parentOwner] = await wrapper.getData(parentNode);
   const parentLocked = await wrapper.allFusesBurned(parentNode, CANNOT_UNWRAP);
-  const alreadyApproved = await wrapper.isApprovedForAll(parentOwner, registrarAddress);
-  const signerIsParentOwner = parentOwner.toLowerCase() === signerAddress.toLowerCase();
+  const alreadyApproved = await wrapper.isApprovedForAll(signerAddress, registrarAddress);
 
   console.log(`Network: ${networkName}`);
   console.log(`Signer: ${signerAddress}`);
@@ -52,23 +60,17 @@ async function main() {
 
   if (active && !parentLocked) {
     throw new Error(
-      "Your wrapped parent is not locked yet. Burn CANNOT_UNWRAP on the parent first in ENS Manager, then run this script again."
+      "Parent is not locked. Burn CANNOT_UNWRAP on the parent in ENS Manager before activating this registrar."
     );
   }
 
   if (!alreadyApproved) {
-    if (!signerIsParentOwner) {
-      throw new Error(
-        "The connected signer is not the current wrapped parent owner. Switch to the parent owner account (or Safe flow) and run again."
-      );
-    }
-
-    console.log("Approving the registrar as an operator on NameWrapper...");
+    console.log("Approving registrar via NameWrapper.setApprovalForAll...");
     const approveTx = await wrapper.setApprovalForAll(registrarAddress, true);
     await approveTx.wait();
     console.log("Approval confirmed.");
   } else {
-    console.log("Registrar is already approved on the NameWrapper.");
+    console.log("Signer already approved registrar on NameWrapper.");
   }
 
   console.log(active ? "Activating parent..." : "Deactivating parent...");
@@ -76,6 +78,7 @@ async function main() {
   await setupTx.wait();
 
   console.log(`Parent active = ${active}`);
+  console.log("Done.");
 }
 
 main().catch((error) => {
