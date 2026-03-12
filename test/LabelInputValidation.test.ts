@@ -15,7 +15,7 @@ describe("script label validation", function () {
 
   it("rejects full ENS name passed as label", function () {
     expect(() => validateSingleLabelInput("12345678.alpha.agent.agi.eth", "alpha.agent.agi.eth")).to.throw(
-      "Use --parent-name alpha.agent.agi.eth and --label <single-label>."
+      "Do not pass a full ENS name as --label"
     );
   });
 
