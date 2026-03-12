@@ -1,5 +1,7 @@
 import { network } from "hardhat";
 
+const MAINNET_CHAIN_ID = 1n;
+
 function readFlag(name: string): string | undefined {
   const key = `--${name}`;
   const index = process.argv.indexOf(key);
@@ -66,6 +68,14 @@ async function main() {
   }
 
   const registrar = await ethers.getContractAt("FreeTrialSubdomainRegistrar", registrarAddress, signer);
+  const chainId = (await ethers.provider.getNetwork()).chainId;
+  if (chainId !== MAINNET_CHAIN_ID) {
+    throw new Error(`This script is mainnet-only. Connected chainId=${chainId.toString()}.`);
+  }
+
+  if ((process.env.CONFIRM_MAINNET || "").toUpperCase() != "YES") {
+    throw new Error("Set CONFIRM_MAINNET=YES to confirm intentional mainnet registration.");
+  }
 
   const isValid = await registrar.validateLabel(label);
   if (!isValid) {
@@ -85,6 +95,7 @@ async function main() {
   console.log(`Owner-controlled fuses: ${ownerControlledFuses}`);
   console.log(`Records count: ${records.length}`);
   console.log(`Expected expiry: ${expiry} (${expiryDate})`);
+  console.log("Cost: free registration (no ETH is sent to the registrar).\n");
 
   console.log("Submitting registration transaction (no ETH should be sent)...");
   const tx = await registrar.register(parentNode, label, newOwner, resolver, ownerControlledFuses, records);

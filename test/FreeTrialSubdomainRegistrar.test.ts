@@ -136,6 +136,43 @@ describe("FreeTrialSubdomainRegistrar", function () {
     expect(BigInt(fuses) & (1n << 18n)).to.equal(0n);
   });
 
+
+  it("rejects owner-controlled fuses that omit CANNOT_UNWRAP", async function () {
+    const { registrar, wrapper, parentNode, now, user } = await deployFixture();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
+
+    await expect(
+      registrar.register(parentNode, "trialpass8", user.address, ethers.ZeroAddress, 4, [])
+    ).to.be.revertedWithCustomError(registrar, "InvalidOwnerControlledFuses");
+  });
+
+  it("supports resolver record writes with matching namehash payload", async function () {
+    const { registrar, wrapper, parentNode, now, user, resolver } = await deployFixture();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
+
+    const childNode = ethers.keccak256(
+      ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))])
+    );
+    const setAddrData = resolver.interface.encodeFunctionData("setAddr", [childNode, user.address]);
+
+    await registrar.register(parentNode, "trialpass8", user.address, await resolver.getAddress(), 0, [setAddrData]);
+
+    expect(await resolver.lastNode()).to.equal(childNode);
+    expect(await resolver.lastAddress()).to.equal(user.address);
+  });
+
+  it("rejects resolver record writes when payload namehash does not match child", async function () {
+    const { registrar, wrapper, parentNode, now, user, resolver } = await deployFixture();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
+
+    const wrongNode = ethers.namehash("wrong.example.eth");
+    const setAddrData = resolver.interface.encodeFunctionData("setAddr", [wrongNode, user.address]);
+
+    await expect(
+      registrar.register(parentNode, "trialpass8", user.address, await resolver.getAddress(), 0, [setAddrData])
+    ).to.be.revertedWithCustomError(registrar, "RecordNamehashMismatch");
+  });
+
   it("rejects ETH sent directly", async function () {
     const { registrar, deployer } = await deployFixture();
     await expect(

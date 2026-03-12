@@ -30,7 +30,7 @@ The child does **not** receive its own grace period. For `.eth` parents, parent 
 
 ## Prerequisites
 
-- Node.js 22+
+- Node.js 22.10+ (required by Hardhat 3)
 - npm
 - Mainnet RPC endpoint
 - Deployer wallet with ETH for gas
@@ -53,6 +53,7 @@ Set required values:
 MAINNET_RPC_URL=...
 DEPLOYER_PRIVATE_KEY=...
 ETHERSCAN_API_KEY=...
+CONFIRM_MAINNET=YES
 REGISTRAR_ADDRESS=0x... # after deploy
 PARENT_NAME=example.eth
 ```
@@ -64,6 +65,8 @@ ENS_NAME_WRAPPER=0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401
 ```
 
 ## Deployment flow (mainnet)
+
+All mainnet scripts require `CONFIRM_MAINNET=YES` as a deliberate safety guard.
 
 ### 1) Deploy registrar
 
@@ -84,7 +87,7 @@ npm run setup:parent:mainnet
 To deactivate later:
 
 ```bash
-ACTIVE=false npm run setup:parent:mainnet
+CONFIRM_MAINNET=YES ACTIVE=false npm run setup:parent:mainnet
 ```
 
 ### 4) Register subname trials
