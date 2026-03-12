@@ -4,6 +4,8 @@ pragma solidity 0.8.17;
 import {IERC1155} from "@openzeppelin/contracts/token/ERC1155/IERC1155.sol";
 
 contract MockNameWrapper is IERC1155 {
+    uint32 internal constant CAN_EXTEND_EXPIRY = 1 << 18;
+
     struct NameData {
         address owner;
         uint32 fuses;
@@ -67,6 +69,15 @@ contract MockNameWrapper is IERC1155 {
         bytes32 node = _childNode(parentNode, label);
         data[node] = NameData(owner, fuses, expiry, true);
         return node;
+    }
+
+    function extendExpiry(bytes32 node, uint64 newExpiry) external {
+        NameData storage d = data[node];
+        require(d.exists, "not wrapped");
+        require(msg.sender == d.owner, "not owner");
+        require((d.fuses & CAN_EXTEND_EXPIRY) == CAN_EXTEND_EXPIRY, "cannot extend");
+        require(newExpiry > d.expiry, "must increase");
+        d.expiry = newExpiry;
     }
 
     function _childNode(bytes32 parentNode, string calldata label) private pure returns (bytes32) {
