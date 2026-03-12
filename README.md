@@ -230,6 +230,7 @@ Safety rules:
 - `RegistrarNotAuthorised`: approve registrar as NameWrapper operator.
 - `ParentNameNotActive`: parent has not been activated in this registrar.
 - `ParentExpired`: parent effective expiry already passed.
+- `DottedLabelNotAllowed`: do not pass dotted/full ENS names in the label field; pass one label only.
 - `InvalidLabelCharacter` / `LabelTooShort`: label must match `[a-z0-9]{8,63}`.
 - `Unavailable`: subname already exists and is not expired.
 - Script error `This script is mainnet-only`: your RPC endpoint or network config is not chain id 1.
