@@ -1,4 +1,5 @@
 import { network } from "hardhat";
+import { validateSingleLabelInput } from "./utils/label-input.js";
 
 const MAINNET_CHAIN_ID = 1n;
 
@@ -47,7 +48,11 @@ function parseRecords(ethersLib: typeof import("ethers")): string[] {
 
 function printUsage(): void {
   console.log(`Usage:
-  npm run register:mainnet -- --registrar 0x... --parent-name example.eth --label trialpass8 [--owner 0x...] [--resolver 0x...] [--fuses 0] [--records "[]"]
+  npm run register:mainnet -- --registrar 0x... --parent-name alpha.agent.agi.eth --label 12345678 [--owner 0x...] [--resolver 0x...] [--fuses 0] [--records "[]"]
+
+Important: --label is one label only (first-degree).
+Example: --label ethereum creates ethereum.alpha.agent.agi.eth
+Do not pass full names to --label (forbidden: --label ethereum.alpha.agent.agi.eth).
 
 Flags can also be provided through .env (see .env.example).`);
 }
@@ -117,9 +122,11 @@ async function main() {
     throw new Error(`No contract code found at REGISTRAR_ADDRESS=${registrarAddress}.`);
   }
 
+  validateSingleLabelInput(label, parentName);
+
   const isValid = await registrar.validateLabel(label);
   if (!isValid) {
-    throw new Error("Invalid label. Use lowercase letters and numbers only, length 8 to 63.");
+    throw new Error("Label failed onchain validation. Use lowercase letters and numbers only, length 8 to 63.");
   }
 
   const parentActive = await registrar.activeParents(parentNode);
@@ -158,6 +165,10 @@ async function main() {
   if (parentName) {
     console.log(`Human name: ${label}.${parentName}`);
   }
+  console.log("Next steps:");
+  console.log("1) Open app.ens.domains and search the new name to confirm wrapped state and expiry.");
+  console.log("2) Share the exact subname with the recipient; remind them this free trial is non-renewable.");
+  console.log("3) For another subname, rerun this script with a different --label (single label only).");
 }
 
 main().catch((error) => {

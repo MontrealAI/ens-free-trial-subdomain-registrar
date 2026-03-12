@@ -63,6 +63,19 @@ npm test
 npm run typecheck
 ```
 
+## Flagship operator example: `alpha.agent.agi.eth`
+
+For a production-style, non-technical-operator walkthrough with copy/paste commands, see:
+
+- [`docs/use-cases/alpha-agent-agi-eth.md`](docs/use-cases/alpha-agent-agi-eth.md)
+
+That guide explicitly demonstrates first-degree free-trial subnames:
+
+- `12345678.alpha.agent.agi.eth`
+- `ethereum.alpha.agent.agi.eth`
+
+and explains why `--label` must be one label only (no dots, no full name input).
+
 ## 6) Environment configuration
 
 Copy `.env.example` and set:
@@ -134,6 +147,13 @@ npm run register:mainnet -- \
   --label trialpass8 \
   --owner 0xRecipient
 ```
+
+Important: `--label` is first-degree only.
+
+- ✅ `--parent-name alpha.agent.agi.eth --label 12345678` creates `12345678.alpha.agent.agi.eth`
+- ✅ `--parent-name alpha.agent.agi.eth --label ethereum` creates `ethereum.alpha.agent.agi.eth`
+- ❌ `--label ethereum.12345678` (dotted/nested label)
+- ❌ `--label 12345678.alpha.agent.agi.eth` (full name passed as label)
 
 Script safety checks include:
 - strict `chainId == 1`
