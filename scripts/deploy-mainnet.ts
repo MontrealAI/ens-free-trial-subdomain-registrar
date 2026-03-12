@@ -21,6 +21,10 @@ async function main() {
     throw new Error(`This script is mainnet-only. Connected chainId=${chainId.toString()}.`);
   }
 
+  if ((process.env.CONFIRM_MAINNET || "").toUpperCase() != "YES") {
+    throw new Error("Set CONFIRM_MAINNET=YES to confirm intentional mainnet deployment.");
+  }
+
   const [deployer] = await ethers.getSigners();
   console.log(`Network: ${networkName}`);
   console.log(`Deployer: ${deployer.address}`);

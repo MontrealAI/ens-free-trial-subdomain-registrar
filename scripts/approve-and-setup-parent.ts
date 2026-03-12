@@ -41,6 +41,10 @@ async function main() {
     throw new Error(`This script is mainnet-only. Connected chainId=${chainId.toString()}.`);
   }
 
+  if ((process.env.CONFIRM_MAINNET || "").toUpperCase() != "YES") {
+    throw new Error("Set CONFIRM_MAINNET=YES to confirm intentional mainnet parent setup.");
+  }
+
   const [signer] = await ethers.getSigners();
   const signerAddress = await signer.getAddress();
 
