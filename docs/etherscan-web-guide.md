@@ -6,6 +6,10 @@ Flagship example parent:
 - Parent name: `alpha.agent.agi.eth`
 - Parent node (namehash): `0xc74b6c5e8a0d97ed1fe28755da7d06a84593b4de92f6582327bc40f41d6c2d5e`
 
+## Environment prerequisite
+
+- Node.js **20.19.6** (`.nvmrc` / `.node-version` pinned)
+
 ## Allowed vs Forbidden label input
 
 Allowed:

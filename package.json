@@ -4,7 +4,8 @@
   "private": true,
   "description": "Free 30-day ENS subname registrar with no child grace period and no owner renewals.",
   "engines": {
-    "node": "20.19.6"
+    "node": "20.19.6",
+    "npm": ">=10"
   },
   "scripts": {
     "build": "hardhat compile",
@@ -26,6 +27,8 @@
     "@types/node": "^20.19.0",
     "dotenv": "^16.4.7",
     "hardhat": "^2.22.17",
-    "typescript": "^5.7.2"
-  }
+    "typescript": "^5.7.2",
+    "solc": "0.8.17"
+  },
+  "packageManager": "npm@11.4.2"
 }

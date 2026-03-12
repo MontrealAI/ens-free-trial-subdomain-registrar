@@ -14,6 +14,10 @@ This walkthrough shows how to run this registrar for the real ENS parent name:
 
 `label` is always one label only (first-degree child of the parent), never a full ENS name.
 
+## Environment prerequisite
+
+- Node.js **20.19.6** (`.nvmrc` / `.node-version` pinned)
+
 ---
 
 ## Allowed vs Forbidden label inputs
