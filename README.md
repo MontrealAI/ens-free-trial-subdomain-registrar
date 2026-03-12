@@ -161,6 +161,7 @@ Script safety checks include:
 - `REGISTRAR_ADDRESS` and non-zero `RESOLVER` must contain deployed bytecode
 - records require a non-zero resolver
 - `PARENT_NODE` must be a 32-byte hex node if provided directly
+- if both `PARENT_NAME` and `PARENT_NODE` are provided, they must resolve to the same node (fails closed on mismatch)
 - onchain label validation preview before submitting tx
 - parent active check (`activeParents`) before submitting tx
 - subname availability preflight (`available(node)`) before submitting tx
