@@ -48,10 +48,12 @@ This ensures:
 ## 4) Prerequisites
 
 - Node.js **20.19.6** (pinned and validated for this repo)
-- npm
+- npm (bundled with Node 20.19.6)
 - Ethereum mainnet RPC URL
 - Deployer/operator wallet with ETH for gas
 - Parent ENS name already wrapped in NameWrapper
+- Version manager support files are included: `.nvmrc` and `.node-version` are both pinned to `20.19.6`.
+- Solidity compilation is pinned to a local `solc@0.8.17` build for deterministic compile behavior on Node 20.19.6.
 
 ## 5) Install and local validation
 

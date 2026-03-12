@@ -7,6 +7,9 @@
 - `test/` — Hardhat tests for contract behavior and script-side validation helpers.
 - `docs/use-cases/` — operator walkthroughs (flagship: `alpha-agent-agi-eth.md`).
 
+## Environment
+- Required runtime: **Node.js 20.19.6** (do not require Node 22+).
+
 ## Canonical commands
 - Install: `npm ci`
 - Build: `npm run build`
