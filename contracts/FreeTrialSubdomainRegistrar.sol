@@ -112,7 +112,7 @@ contract FreeTrialSubdomainRegistrar is ERC1155Holder, ReentrancyGuard {
     /// @param label Lowercase alphanumeric label, length 8..63.
     /// @param newOwner Final owner of the wrapped subname.
     /// @param resolver Resolver address, or zero address if no resolver is needed.
-    /// @param ownerControlledFuses Optional owner-controlled fuses. If nonzero, must include CANNOT_UNWRAP.
+    /// @param ownerControlledFuses Optional owner-controlled fuses. CANNOT_UNWRAP is always forced on.
     /// @param records Optional resolver calls. If present, resolver must be a contract and payloads must embed the child namehash.
     function register(
         bytes32 parentNode,
@@ -137,19 +137,12 @@ contract FreeTrialSubdomainRegistrar is ERC1155Holder, ReentrancyGuard {
         if (!available(node)) revert Unavailable(node);
 
         if (records.length > 0) {
-            wrapper.setSubnodeOwner(parentNode, label, address(this), 0, expiry);
+            wrapper.setSubnodeOwner(parentNode, label, address(this), CANNOT_UNWRAP, expiry);
             _setRecords(node, resolver, records);
         }
 
-        wrapper.setSubnodeRecord(
-            parentNode,
-            label,
-            newOwner,
-            resolver,
-            0,
-            uint32(ownerControlledFuses) | PARENT_CANNOT_CONTROL,
-            expiry
-        );
+        uint32 wrappedFuses = uint32(ownerControlledFuses) | CANNOT_UNWRAP | PARENT_CANNOT_CONTROL;
+        wrapper.setSubnodeRecord(parentNode, label, newOwner, resolver, 0, wrappedFuses, expiry);
 
         emit NameRegistered(parentNode, node, newOwner, label, expiry, ownerControlledFuses);
     }
