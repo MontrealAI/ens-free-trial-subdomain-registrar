@@ -1,184 +1,136 @@
 # ENS Free Trial Subdomain Registrar
 
-A production-oriented Hardhat project for a **free 30-day ENS subname trial**.
+Production-focused ENS subname registrar for **free 30-day wrapped trials** with strict expiry behavior.
 
-## What this contract does
+## Executive Summary
 
-- Every new subname gets:
-  - `expiry = block.timestamp + 30 days`, or
-  - the parent's effective expiry, if the parent expires sooner.
-- The subname itself gets **no extra grace period**.
-- Registration is **free**.
-- The subname owner **cannot renew** through `CAN_EXTEND_EXPIRY`, because this fuse is not granted.
-- Labels are limited to lowercase ASCII letters and digits only: `[a-z0-9]`.
-- Labels must be **8 to 63 characters** long.
-- The contract rejects ETH.
-- Optional resolver record writes are supported.
+This system lets anyone register a free wrapped subname under approved parent names. Each child expiry is:
 
-## Recommended repository name
+- `min(block.timestamp + 30 days, parent effective expiry)`
 
-`ens-free-trial-subdomain-registrar`
+The child does **not** receive its own grace period. For `.eth` parents, parent grace is only used when determining parent effective expiry cap.
 
-## Quick start
+## Security Model (Important)
+
+- Parent must already be wrapped and locked (`CANNOT_UNWRAP` burned on parent).
+- Parent owner (or authorized operator) must approve this registrar on NameWrapper.
+- Registrar forces child `CANNOT_UNWRAP` + `PARENT_CANNOT_CONTROL` to prevent trial-bypass via unwrap and to prevent parent takeover.
+- Child owner is never granted `CAN_EXTEND_EXPIRY`.
+- Registration is free (`register` is non-payable and contract rejects ETH).
+- Labels are enforced onchain: lowercase alphanumeric only, 8–63 chars.
+
+## What this repo includes
+
+- Solidity registrar contract (`contracts/FreeTrialSubdomainRegistrar.sol`)
+- Mainnet deployment script
+- Parent approval/activation script
+- Registration script
+- Local tests with mocks for NameWrapper behavior
+- CI workflow
+
+## Prerequisites
+
+- Node.js 22+
+- npm
+- Mainnet RPC endpoint
+- Deployer wallet with ETH for gas
+- Parent ENS name already wrapped in ENS NameWrapper
+
+## Install
 
 ```bash
-cp .env.example .env
 npm install
+cp .env.example .env
 npm run build
+npm test
 ```
 
-## Required environment variables
+## Configure `.env`
 
-Open `.env` and set at least:
+Set required values:
 
 ```bash
 MAINNET_RPC_URL=...
 DEPLOYER_PRIVATE_KEY=...
 ETHERSCAN_API_KEY=...
+REGISTRAR_ADDRESS=0x... # after deploy
+PARENT_NAME=example.eth
 ```
 
-## One-time mainnet deployment
+Optional override:
+
+```bash
+ENS_NAME_WRAPPER=0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401
+```
+
+## Deployment flow (mainnet)
+
+### 1) Deploy registrar
 
 ```bash
 npm run deploy:mainnet
 ```
 
-The deploy script prints your deployed registrar address. Put it into `.env` as `REGISTRAR_ADDRESS`.
+### 2) Lock parent in ENS Manager
 
-## Before activating a parent name
+Before activation, burn `CANNOT_UNWRAP` on the parent. The script cannot do this for you.
 
-Your parent ENS name must already be:
-
-1. Wrapped in the ENS NameWrapper.
-2. Locked (`CANNOT_UNWRAP` burned on the parent).
-3. Approved for this registrar via `NameWrapper.setApprovalForAll(registrar, true)`.
-
-The script below can do the operator approval and the parent activation, but it **cannot** lock the parent for you. Lock the parent first, then run the script from the wrapped parent owner account.
-
-## Activate a parent name
-
-Example:
+### 3) Approve + activate parent
 
 ```bash
-export REGISTRAR_ADDRESS=0xYourRegistrar
-export PARENT_NAME=example.eth
 npm run setup:parent:mainnet
 ```
 
-To deactivate a parent later:
+To deactivate later:
 
 ```bash
-export ACTIVE=false
-npm run setup:parent:mainnet
+ACTIVE=false npm run setup:parent:mainnet
 ```
 
-## Register a free trial subname
-
-### Simplest form
-
-```bash
-export REGISTRAR_ADDRESS=0xYourRegistrar
-export PARENT_NAME=example.eth
-export LABEL=trialpass8
-export NEW_OWNER=0xRecipientAddress
-npm run register:mainnet
-```
-
-### Same thing with CLI flags
+### 4) Register subname trials
 
 ```bash
 npm run register:mainnet -- \
   --registrar 0xYourRegistrar \
   --parent-name example.eth \
   --label trialpass8 \
-  --owner 0xRecipientAddress
+  --owner 0xRecipient
 ```
 
-### Optional resolver
-
-If you want a resolver but no records:
-
-```bash
-npm run register:mainnet -- \
-  --registrar 0xYourRegistrar \
-  --parent-name example.eth \
-  --label trialpass8 \
-  --owner 0xRecipientAddress \
-  --resolver 0xYourResolver
-```
-
-### Optional fuse presets
-
-- Transferable trial subname: `0`
-- Non-transferable “free pass”: `5`
-  - `5 = CANNOT_UNWRAP | CANNOT_TRANSFER`
-
-Example:
-
-```bash
-npm run register:mainnet -- \
-  --registrar 0xYourRegistrar \
-  --parent-name example.eth \
-  --label trialpass8 \
-  --owner 0xRecipientAddress \
-  --fuses 5
-```
-
-## Verify on Etherscan
-
-After deployment:
+### 5) Verify contract
 
 ```bash
 npm run verify:mainnet -- 0xYourRegistrar 0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401
 ```
 
-If you changed the wrapper address, replace the second constructor argument.
+## Resolver records
 
-## Recommended GitHub settings
+`register` supports optional resolver calls (`records`).
 
-After pushing this repo to GitHub:
+- If records are provided, resolver must be a deployed contract.
+- Every record payload must include the child namehash in calldata bytes `[4:36]`.
+- Use with care; malformed payloads revert.
 
-1. Protect the `main` branch.
-2. Require pull requests for changes to `main`.
-3. Require the CI workflow to pass before merge.
-4. Enable Dependabot alerts.
-5. Enable secret scanning / push protection.
-6. Never commit `.env` or private keys.
+## Operational constraints (non-negotiable)
 
-## Human-friendly usage notes
+- This is a **free trial registrar**, not paid rent collection.
+- Child owners cannot self-extend expiry.
+- Childs can still expire and become available again.
+- Parent operators still hold operational power by controlling parent-level setup and authorization.
 
-- Use lowercase labels only.
-- Pick labels of at least 8 characters.
-- If the wrapped parent has less than 30 days left, the child expires when the parent effectively expires.
-- For `.eth` parents, the registrar subtracts the usual parent grace period **only when capping against the parent**. It does **not** add grace to the child.
-- The child owner cannot self-renew because `CAN_EXTEND_EXPIRY` is never granted.
-- The parent owner can still choose to extend an existing child later, because that is how ENS subname expiry works.
+## Troubleshooting
 
-## Common mistakes
+- `ParentNotLocked`: burn `CANNOT_UNWRAP` on parent first.
+- `RegistrarNotAuthorised`: run setup script from account that can approve operator for the wrapped parent.
+- `InvalidLabelCharacter` / `LabelTooShort`: fix label to `[a-z0-9]{8,63}`.
+- `Unavailable`: name currently has unexpired wrapped registration.
 
-### “Parent not locked”
-Lock the parent first in ENS Manager by burning `CANNOT_UNWRAP`.
+## Manual pre-mainnet checklist
 
-### “Registrar not authorised”
-Approve the registrar on the NameWrapper, then run `npm run setup:parent:mainnet` again.
-
-### “Invalid label”
-Use only lowercase letters and numbers, 8 to 63 characters.
-
-### “Verification failed”
-Make sure you deployed and verified with the same build profile:
-
-```bash
-npm run build
-npm run verify:mainnet -- 0xYourRegistrar 0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401
-```
-
-## Suggested release checklist
-
-- [ ] Review the contract one more time.
-- [ ] Run a Sepolia or local dry run first.
-- [ ] Fund the deployer wallet with enough ETH.
-- [ ] Double-check the parent name is wrapped and locked.
-- [ ] Double-check `REGISTRAR_ADDRESS` in `.env`.
-- [ ] Verify the contract after deployment.
-- [ ] Turn on branch protection and repository security features.
+- [ ] Contract built and tests pass locally.
+- [ ] Parent wrapping and fuse state verified in ENS Manager.
+- [ ] Correct NameWrapper address confirmed.
+- [ ] Deployer key handled securely (hardware wallet/Safe preferred).
+- [ ] Dry run done on test environment/fork.
+- [ ] Contract verified after deployment.
+- [ ] Monitoring/alerting in place for failed ops transactions.

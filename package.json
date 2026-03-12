@@ -15,11 +15,14 @@
     "deploy:mainnet": "hardhat run scripts/deploy-mainnet.ts --build-profile production --network mainnet",
     "setup:parent:mainnet": "hardhat run scripts/approve-and-setup-parent.ts --build-profile production --network mainnet",
     "register:mainnet": "hardhat run scripts/register-subname.ts --build-profile production --network mainnet",
-    "verify:mainnet": "hardhat verify --build-profile production --network mainnet"
+    "verify:mainnet": "hardhat verify --build-profile production --network mainnet",
+    "typecheck": "tsc --noEmit",
+    "ci": "npm run build && npm run test && npm run typecheck"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.0",
     "@openzeppelin/contracts": "^4.9.6",
+    "@types/mocha": "^10.0.10",
     "@types/node": "^22.10.5",
     "dotenv": "^16.4.7",
     "hardhat": "^3.0.0",
