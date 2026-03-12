@@ -401,6 +401,20 @@ describe("FreeTrialSubdomainRegistrar", function () {
     expect(await registrar.validateLabel("12345678.alpha.agent.agi.eth")).to.equal(false);
   });
 
+  it("register rejects dotted and full-name labels", async function () {
+    const { registrar, wrapper, parentNode, user } = await deployFixture();
+    const now = await latestTimestamp();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
+
+    await expect(
+      registrar.register(parentNode, "ethereum.12345678", user.address, ethers.ZeroAddress, 0, [])
+    ).to.be.revertedWithCustomError(registrar, "InvalidLabelCharacter");
+
+    await expect(
+      registrar.register(parentNode, "12345678.alpha.agent.agi.eth", user.address, ethers.ZeroAddress, 0, [])
+    ).to.be.revertedWithCustomError(registrar, "InvalidLabelCharacter");
+  });
+
   it("label validation property: random labels accepted iff [a-z0-9]{8,63}", async function () {
     const { registrar } = await deployFixture();
 

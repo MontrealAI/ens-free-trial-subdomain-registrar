@@ -5,7 +5,7 @@ export function validateSingleLabelInput(label: string, parentName?: string): vo
     const parentHint = parentName ?? "<parent-name>";
     throw new Error(
       [
-        `Invalid label \"${label}\": labels must be a single first-degree label with no dots.`,
+        `Invalid label \"${label}\": labels must be a single first-degree label with no dots. Do not pass a full ENS name as --label.`,
         `Use --parent-name ${parentHint} and --label <single-label>.`,
         `Example: --parent-name ${parentHint} --label 12345678 (creates 12345678.${parentHint}).`
       ].join(" ")
