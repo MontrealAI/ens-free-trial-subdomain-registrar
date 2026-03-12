@@ -8,7 +8,14 @@
     "resolveJsonModule": true,
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
-    "types": ["node"]
+    "types": [
+      "node",
+      "mocha"
+    ]
   },
-  "include": ["hardhat.config.ts", "scripts", "test"]
+  "include": [
+    "hardhat.config.ts",
+    "scripts",
+    "test"
+  ]
 }

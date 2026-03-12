@@ -11,17 +11,32 @@ function resolveParentNode(ethersLib: typeof import("ethers")): string {
   const parentNode = readFlag("parent-node") || process.env.PARENT_NODE;
   const parentName = readFlag("parent-name") || process.env.PARENT_NAME;
 
-  if (parentNode && parentNode !== "") return parentNode;
-  if (parentName && parentName !== "") return ethersLib.namehash(parentName);
+  if (parentNode) return parentNode;
+  if (parentName) return ethersLib.namehash(parentName);
 
   throw new Error("Provide --parent-name, --parent-node, PARENT_NAME, or PARENT_NODE.");
 }
 
-function parseRecords(): string[] {
+function parseRecords(ethersLib: typeof import("ethers")): string[] {
   const raw = readFlag("records") || process.env.RECORDS_JSON || "[]";
-  const value = JSON.parse(raw);
-  if (!Array.isArray(value) || !value.every((item) => typeof item === "string")) {
+  let value: unknown;
+
+  try {
+    value = JSON.parse(raw);
+  } catch {
+    throw new Error("RECORDS_JSON / --records must be valid JSON.");
+  }
+
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string" && ethersLib.isHexString(item))) {
     throw new Error("RECORDS_JSON / --records must be a JSON array of hex strings.");
+  }
+
+  return value;
+}
+
+function requireAddress(name: string, value: string | undefined, ethersLib: typeof import("ethers")): string {
+  if (!value || !ethersLib.isAddress(value)) {
+    throw new Error(`${name} must be set to a valid address.`);
   }
   return value;
 }
@@ -29,10 +44,9 @@ function parseRecords(): string[] {
 const { ethers, networkName } = await network.connect();
 
 async function main() {
-  const registrarAddress = readFlag("registrar") || process.env.REGISTRAR_ADDRESS;
+  const registrarAddress = requireAddress("REGISTRAR_ADDRESS", readFlag("registrar") || process.env.REGISTRAR_ADDRESS, ethers);
   const label = readFlag("label") || process.env.LABEL;
 
-  if (!registrarAddress) throw new Error("Provide --registrar or set REGISTRAR_ADDRESS.");
   if (!label) throw new Error("Provide --label or set LABEL.");
 
   const [signer] = await ethers.getSigners();
@@ -40,11 +54,12 @@ async function main() {
 
   const parentNode = resolveParentNode(ethers);
   const parentName = readFlag("parent-name") || process.env.PARENT_NAME;
-  const newOwner = readFlag("owner") || process.env.NEW_OWNER || signerAddress;
-  const resolver = readFlag("resolver") || process.env.RESOLVER || ethers.ZeroAddress;
+  const newOwner = requireAddress("NEW_OWNER", readFlag("owner") || process.env.NEW_OWNER || signerAddress, ethers);
+  const resolverRaw = readFlag("resolver") || process.env.RESOLVER || ethers.ZeroAddress;
+  const resolver = requireAddress("RESOLVER", resolverRaw, ethers);
   const ownerControlledFusesRaw = readFlag("fuses") || process.env.OWNER_CONTROLLED_FUSES || "0";
   const ownerControlledFuses = Number(ownerControlledFusesRaw);
-  const records = parseRecords();
+  const records = parseRecords(ethers);
 
   if (!Number.isInteger(ownerControlledFuses) || ownerControlledFuses < 0 || ownerControlledFuses > 65535) {
     throw new Error("ownerControlledFuses must be an integer between 0 and 65535.");
@@ -71,15 +86,8 @@ async function main() {
   console.log(`Records count: ${records.length}`);
   console.log(`Expected expiry: ${expiry} (${expiryDate})`);
 
-  console.log("Submitting registration transaction...");
-  const tx = await registrar.register(
-    parentNode,
-    label,
-    newOwner,
-    resolver,
-    ownerControlledFuses,
-    records
-  );
+  console.log("Submitting registration transaction (no ETH should be sent)...");
+  const tx = await registrar.register(parentNode, label, newOwner, resolver, ownerControlledFuses, records);
   await tx.wait();
 
   const node = ethers.keccak256(
