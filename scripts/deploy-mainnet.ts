@@ -1,14 +1,14 @@
-import { network } from "hardhat";
+import { ethers, network } from "hardhat";
 
 import {
   requireMainnetBroadcastConfirmation,
   writeDeploymentManifest
-} from "./utils/mainnet-safety.js";
+} from "./utils/mainnet-safety";
 
 const MAINNET_CHAIN_ID = 1;
 const DEFAULT_WRAPPER = "0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401";
 
-function requireAddress(name: string, value: string, ethersLib: typeof import("ethers")): string {
+function requireAddress(name: string, value: string, ethersLib: { isAddress: (value: string) => boolean; isHexString?: (value: string) => boolean }): string {
   if (!ethersLib.isAddress(value)) {
     throw new Error(`${name} must be a valid address. Received: ${value}`);
   }
@@ -26,7 +26,6 @@ Optional:
 This script is mainnet-only and writes a deployment manifest under deployments/mainnet/.`);
 }
 
-const { ethers, networkName } = await network.connect();
 
 async function main() {
   if (process.argv.includes("--help")) {
@@ -55,7 +54,7 @@ async function main() {
     throw new Error(`ENS_NAME_WRAPPER=${wrapper} has no contract bytecode on mainnet. Refusing to deploy.`);
   }
 
-  console.log(`Network: ${networkName}`);
+  console.log(`Network: ${network.name}`);
   console.log(`Chain ID: ${chainId.toString()}`);
   console.log(`Deployer: ${deployer.address}`);
   console.log(`Deployer ETH balance: ${ethers.formatEther(deployerBalance)} ETH`);
@@ -73,7 +72,7 @@ async function main() {
 
   const verifyCommand = `npm run verify:mainnet -- ${address} ${wrapper}`;
   const manifestPath = await writeDeploymentManifest({
-    network: networkName,
+    network: network.name,
     chainId: chainId.toString(),
     deployer: deployer.address,
     contractName: "FreeTrialSubdomainRegistrar",

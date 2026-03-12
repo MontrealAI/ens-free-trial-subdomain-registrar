@@ -1,8 +1,8 @@
-import { network } from "hardhat";
+import { ethers, network } from "hardhat";
 
-import { readFlagValue, hasFlag } from "./utils/cli-flags.js";
-import { resolveParentNodeInput } from "./utils/parent-input.js";
-import { requireMainnetBroadcastConfirmation } from "./utils/mainnet-safety.js";
+import { readFlagValue, hasFlag } from "./utils/cli-flags";
+import { resolveParentNodeInput } from "./utils/parent-input";
+import { requireMainnetBroadcastConfirmation } from "./utils/mainnet-safety";
 
 const MAINNET_CHAIN_ID = 1;
 const DEFAULT_WRAPPER = "0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401";
@@ -15,9 +15,9 @@ const WRAPPER_ABI = [
   "function isApprovedForAll(address account, address operator) external view returns (bool)",
   "function allFusesBurned(bytes32 node, uint32 fuseMask) external view returns (bool)",
   "function getData(uint256 id) external view returns (address owner, uint32 fuses, uint64 expiry)"
-] as const;
+];
 
-function requireAddress(name: string, value: string | undefined, ethersLib: typeof import("ethers")): string {
+function requireAddress(name: string, value: string | undefined, ethersLib: { isAddress: (value: string) => boolean; isHexString?: (value: string) => boolean }): string {
   if (!value || !ethersLib.isAddress(value)) {
     throw new Error(`${name} must be set to a valid address.`);
   }
@@ -74,7 +74,6 @@ Safety notes:
   - If both parent name and parent node are supplied, they must match exactly.`);
 }
 
-const { ethers, networkName } = await network.connect();
 
 async function main() {
   if (hasFlag(process.argv, "help")) {
@@ -135,7 +134,7 @@ async function main() {
   const alreadyApproved = await wrapper.isApprovedForAll(parentOwner, registrarAddress);
   const signerIsParentOwner = parentOwner.toLowerCase() === signerAddress.toLowerCase();
 
-  console.log(`Network: ${networkName}`);
+  console.log(`Network: ${network.name}`);
   console.log(`Chain ID: ${chainId.toString()}`);
   console.log(`Signer: ${signerAddress}`);
   console.log(`Signer ETH balance: ${ethers.formatEther(signerBalance)} ETH`);

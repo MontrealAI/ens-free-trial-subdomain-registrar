@@ -1,7 +1,7 @@
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { readFlagValue } from "./cli-flags.js";
+import { readFlagValue } from "./cli-flags";
 
 const MAINNET_CONFIRM_PHRASE = "I_UNDERSTAND_MAINNET";
 

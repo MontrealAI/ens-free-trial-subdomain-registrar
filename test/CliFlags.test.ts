@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { hasFlag, readFlagValue } from "../scripts/utils/cli-flags.js";
+import { hasFlag, readFlagValue } from "../scripts/utils/cli-flags";
 
 describe("cli flag parsing", function () {
   it("reads normal flag values", function () {
