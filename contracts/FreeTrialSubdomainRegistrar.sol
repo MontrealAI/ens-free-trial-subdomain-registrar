@@ -350,7 +350,7 @@ contract FreeTrialSubdomainRegistrar is ERC1155Holder, ReentrancyGuard {
         return true;
     }
 
-    function _setRecords(bytes32 node, address resolver, bytes[] calldata records) internal {
+    function _setRecords(bytes32 node, address resolver, bytes[] memory records) internal {
         for (uint256 i = 0; i < records.length; ) {
             if (records[i].length < 36) revert InvalidRecordPayload(i);
 

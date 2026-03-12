@@ -65,6 +65,7 @@ Optional inputs:
   ENS_NAME_WRAPPER=0x... (defaults to mainnet NameWrapper)
   PARENT_ACTION=activate|deactivate|remove (default activate)
   ACTIVE=true|false (legacy fallback only; prefer PARENT_ACTION)
+  --active is deprecated and rejected (use --action instead)
   MAINNET_CONFIRM=I_UNDERSTAND_MAINNET (env alternative)
 
 Safety notes:
@@ -79,6 +80,12 @@ async function main() {
   if (hasFlag(process.argv, "help")) {
     printUsage();
     return;
+  }
+
+  if (hasFlag(process.argv, "active")) {
+    throw new Error(
+      "Flag --active is deprecated and intentionally rejected to avoid accidental activation. Use --action activate|deactivate|remove."
+    );
   }
 
   requireMainnetBroadcastConfirmation(process.argv, "broadcast parent lifecycle transactions");
