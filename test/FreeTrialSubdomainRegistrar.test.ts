@@ -386,6 +386,21 @@ describe("FreeTrialSubdomainRegistrar", function () {
     await registrar.register(parentNode, "trialpass8", user.address, ethers.ZeroAddress, 0, []);
   });
 
+
+  it("accepts flagship labels 12345678 and ethereum", async function () {
+    const { registrar } = await deployFixture();
+
+    expect(await registrar.validateLabel("12345678")).to.equal(true);
+    expect(await registrar.validateLabel("ethereum")).to.equal(true);
+  });
+
+  it("rejects dotted and full-name label inputs", async function () {
+    const { registrar } = await deployFixture();
+
+    expect(await registrar.validateLabel("ethereum.12345678")).to.equal(false);
+    expect(await registrar.validateLabel("12345678.alpha.agent.agi.eth")).to.equal(false);
+  });
+
   it("label validation property: random labels accepted iff [a-z0-9]{8,63}", async function () {
     const { registrar } = await deployFixture();
 
