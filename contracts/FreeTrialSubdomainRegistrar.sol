@@ -45,7 +45,6 @@ error ResolverNotContract(address resolver);
 error LabelTooShort(uint256 length);
 error LabelTooLong(uint256 length);
 error InvalidLabelCharacter(uint256 index, bytes1 character);
-error InvalidOwnerControlledFuses(uint16 fuses);
 error EtherNotAccepted();
 error RecordNamehashMismatch(bytes32 expectedNode, bytes32 providedNode);
 error InvalidRecordPayload(uint256 index);
@@ -126,7 +125,6 @@ contract FreeTrialSubdomainRegistrar is ERC1155Holder, ReentrancyGuard {
         if (newOwner == address(0)) revert InvalidOwner();
 
         _validateLabel(label);
-        _validateOwnerControlledFuses(ownerControlledFuses);
         _validateResolver(resolver, records.length);
 
         uint64 expiry = _trialExpiry(parentNode);
@@ -219,12 +217,6 @@ contract FreeTrialSubdomainRegistrar is ERC1155Holder, ReentrancyGuard {
 
         if (resolver == address(0)) revert ResolverRequired();
         if (!resolver.isContract()) revert ResolverNotContract(resolver);
-    }
-
-    function _validateOwnerControlledFuses(uint16 ownerControlledFuses) internal pure {
-        if (ownerControlledFuses != 0 && (ownerControlledFuses & uint16(CANNOT_UNWRAP)) == 0) {
-            revert InvalidOwnerControlledFuses(ownerControlledFuses);
-        }
     }
 
     function _validateLabel(string calldata label) internal pure {
