@@ -47,7 +47,7 @@ This ensures:
 
 ## 4) Prerequisites
 
-- Node.js **22.10+** (required by this repo and Hardhat 3 config)
+- Node.js **20.19.6** (pinned and validated for this repo)
 - npm
 - Ethereum mainnet RPC URL
 - Deployer/operator wallet with ETH for gas
@@ -239,7 +239,7 @@ Safety rules:
 
 ## 10) Mainnet deployment checklist
 
-- [ ] Node.js 22.10+ in operator environment.
+- [ ] Node.js 20.19.6 in operator environment.
 - [ ] `npm ci`, `npm run build`, `npm test`, `npm run typecheck` all pass.
 - [ ] Wrapper address confirmed for target chain.
 - [ ] Parent wrapped and locked (`CANNOT_UNWRAP` burned).

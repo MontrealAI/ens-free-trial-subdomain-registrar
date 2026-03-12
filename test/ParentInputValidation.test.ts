@@ -1,6 +1,6 @@
 import { expect } from "chai";
 import { ethers } from "ethers";
-import { resolveParentNodeInput } from "../scripts/utils/parent-input.js";
+import { resolveParentNodeInput } from "../scripts/utils/parent-input";
 
 describe("parent input resolution", function () {
   it("derives node from parent name", function () {

@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { validateSingleLabelInput } from "../scripts/utils/label-input.js";
+import { validateSingleLabelInput } from "../scripts/utils/label-input";
 
 describe("script label validation", function () {
   it("accepts valid first-degree labels", function () {

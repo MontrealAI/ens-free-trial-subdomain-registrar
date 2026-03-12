@@ -1,8 +1,8 @@
-import { network } from "hardhat";
+import { ethers, network } from "hardhat";
 
-import { readFlagValue, hasFlag } from "./utils/cli-flags.js";
-import { resolveParentNodeInput } from "./utils/parent-input.js";
-import { validateSingleLabelInput } from "./utils/label-input.js";
+import { readFlagValue, hasFlag } from "./utils/cli-flags";
+import { resolveParentNodeInput } from "./utils/parent-input";
+import { validateSingleLabelInput } from "./utils/label-input";
 
 const MAINNET_CHAIN_ID = 1n;
 const DEFAULT_WRAPPER = "0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401";
@@ -12,9 +12,9 @@ const WRAPPER_ABI = [
   "function getData(uint256 id) external view returns (address owner, uint32 fuses, uint64 expiry)",
   "function allFusesBurned(bytes32 node, uint32 fuseMask) external view returns (bool)",
   "function isApprovedForAll(address account, address operator) external view returns (bool)"
-] as const;
+];
 
-function requireAddress(name: string, value: string | undefined, ethersLib: typeof import("ethers")): string {
+function requireAddress(name: string, value: string | undefined, ethersLib: { isAddress: (value: string) => boolean; isHexString?: (value: string) => boolean }): string {
   if (!value || !ethersLib.isAddress(value)) {
     throw new Error(`${name} must be set to a valid address.`);
   }
@@ -42,8 +42,7 @@ async function main() {
     return;
   }
 
-  const { ethers, networkName } = await network.connect();
-  const provider = ethers.provider;
+    const provider = ethers.provider;
   const chainId = (await provider.getNetwork()).chainId;
 
   if (chainId !== MAINNET_CHAIN_ID) {
@@ -71,7 +70,7 @@ async function main() {
   const parentNameInput = readFlagValue(process.argv, "parent-name") || process.env.PARENT_NAME;
   const label = readFlagValue(process.argv, "label") || process.env.LABEL;
 
-  console.log(`Network: ${networkName}`);
+  console.log(`Network: ${network.name}`);
   console.log(`Chain ID: ${chainId.toString()}`);
   console.log(`Signer: ${signerAddress}`);
   console.log(`Signer ETH balance: ${ethers.formatEther(signerBalance)} ETH`);

@@ -4,7 +4,7 @@ import {
   requireMainnetBroadcastConfirmation,
   writeDeploymentManifest,
   type DeploymentManifest
-} from "../scripts/utils/mainnet-safety.js";
+} from "../scripts/utils/mainnet-safety";
 
 describe("mainnet safety helpers", function () {
   it("accepts explicit confirm flag", function () {

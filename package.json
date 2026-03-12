@@ -3,30 +3,29 @@
   "version": "1.0.0",
   "private": true,
   "description": "Free 30-day ENS subname registrar with no child grace period and no owner renewals.",
-  "type": "module",
   "engines": {
-    "node": ">=22.10.0"
+    "node": "20.19.6"
   },
   "scripts": {
-    "clean": "hardhat clean",
-    "build": "hardhat build --build-profile production",
-    "build:dev": "hardhat build",
-    "test": "hardhat test --build-profile production",
-    "deploy:mainnet": "hardhat run scripts/deploy-mainnet.ts --build-profile production --network mainnet",
-    "setup:parent:mainnet": "hardhat run scripts/approve-and-setup-parent.ts --build-profile production --network mainnet",
-    "register:mainnet": "hardhat run scripts/register-subname.ts --build-profile production --network mainnet",
-    "verify:mainnet": "hardhat verify --build-profile production --network mainnet",
-    "typecheck": "tsc --noEmit",
+    "build": "hardhat compile",
+    "build:dev": "hardhat compile",
     "ci": "npm run build && npm run test && npm run typecheck",
-    "doctor:mainnet": "hardhat run scripts/mainnet-doctor.ts --build-profile production --network mainnet"
+    "clean": "hardhat clean",
+    "deploy:mainnet": "hardhat run scripts/deploy-mainnet.ts --network mainnet",
+    "doctor:mainnet": "hardhat run scripts/mainnet-doctor.ts --network mainnet",
+    "register:mainnet": "hardhat run scripts/register-subname.ts --network mainnet",
+    "setup:parent:mainnet": "hardhat run scripts/approve-and-setup-parent.ts --network mainnet",
+    "test": "hardhat test",
+    "typecheck": "tsc --noEmit",
+    "verify:mainnet": "hardhat verify --network mainnet"
   },
   "devDependencies": {
-    "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.0",
+    "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@openzeppelin/contracts": "^4.9.6",
     "@types/mocha": "^10.0.10",
-    "@types/node": "^22.10.5",
+    "@types/node": "^20.19.0",
     "dotenv": "^16.4.7",
-    "hardhat": "^3.0.0",
+    "hardhat": "^2.22.17",
     "typescript": "^5.7.2"
   }
 }

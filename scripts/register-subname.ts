@@ -1,12 +1,12 @@
-import { network } from "hardhat";
-import { readFlagValue, hasFlag } from "./utils/cli-flags.js";
-import { validateSingleLabelInput } from "./utils/label-input.js";
-import { resolveParentNodeInput } from "./utils/parent-input.js";
-import { requireMainnetBroadcastConfirmation } from "./utils/mainnet-safety.js";
+import { ethers, network } from "hardhat";
+import { readFlagValue, hasFlag } from "./utils/cli-flags";
+import { validateSingleLabelInput } from "./utils/label-input";
+import { resolveParentNodeInput } from "./utils/parent-input";
+import { requireMainnetBroadcastConfirmation } from "./utils/mainnet-safety";
 
 const MAINNET_CHAIN_ID = 1n;
 
-function parseRecords(ethersLib: typeof import("ethers")): string[] {
+function parseRecords(ethersLib: { isHexString: (value: string) => boolean }): string[] {
   const raw = readFlagValue(process.argv, "records") || process.env.RECORDS_JSON || "[]";
   let value: unknown;
 
@@ -35,7 +35,7 @@ Flags can also be provided through .env (see .env.example).
 Mainnet safety: requires --confirm-mainnet I_UNDERSTAND_MAINNET (or MAINNET_CONFIRM env).`);
 }
 
-function requireAddress(name: string, value: string | undefined, ethersLib: typeof import("ethers")): string {
+function requireAddress(name: string, value: string | undefined, ethersLib: { isAddress: (value: string) => boolean; isHexString?: (value: string) => boolean }): string {
   if (!value || !ethersLib.isAddress(value)) {
     throw new Error(`${name} must be set to a valid address.`);
   }
@@ -50,8 +50,7 @@ async function main() {
 
   requireMainnetBroadcastConfirmation(process.argv, "broadcast a subname registration transaction");
 
-  const { ethers, networkName } = await network.connect();
-  const chainId = (await ethers.provider.getNetwork()).chainId;
+    const chainId = (await ethers.provider.getNetwork()).chainId;
   if (chainId !== MAINNET_CHAIN_ID) {
     throw new Error(`This script is mainnet-only. Connected chainId=${chainId.toString()}.`);
   }
@@ -125,7 +124,7 @@ async function main() {
   const expiry = await registrar.nextExpiry(parentNode);
   const expiryDate = new Date(Number(expiry) * 1000).toISOString();
 
-  console.log(`Network: ${networkName}`);
+  console.log(`Network: ${network.name}`);
   console.log(`Chain ID: ${chainId.toString()}`);
   console.log(`Registrar: ${registrarAddress}`);
   console.log(`Parent node: ${parentNode}`);

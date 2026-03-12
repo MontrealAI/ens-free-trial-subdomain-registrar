@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { network } from "hardhat";
+import { ethers } from "hardhat";
 
 const CANNOT_UNWRAP = 1n;
 const CANNOT_TRANSFER = 4n;
@@ -9,7 +9,6 @@ const CAN_EXTEND_EXPIRY = 1n << 18n;
 const THIRTY_DAYS = 30n * 24n * 60n * 60n;
 const NINETY_DAYS = 90n * 24n * 60n * 60n;
 
-const { ethers } = await network.connect();
 
 describe("FreeTrialSubdomainRegistrar", function () {
   async function deployFixture() {
