@@ -15,7 +15,8 @@
     "deploy:mainnet": "hardhat run scripts/deploy-mainnet.ts --build-profile production --network mainnet",
     "setup:parent:mainnet": "hardhat run scripts/approve-and-setup-parent.ts --build-profile production --network mainnet",
     "register:mainnet": "hardhat run scripts/register-subname.ts --build-profile production --network mainnet",
-    "verify:mainnet": "hardhat verify --build-profile production --network mainnet"
+    "verify:mainnet": "hardhat verify --build-profile production --network mainnet",
+    "check": "npm run clean && npm run build && npm test"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox-mocha-ethers": "^3.0.0",

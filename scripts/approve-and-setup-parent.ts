@@ -1,3 +1,4 @@
+import { isAddress } from "ethers";
 import { network } from "hardhat";
 
 const DEFAULT_WRAPPER = "0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401";
@@ -7,15 +8,25 @@ const WRAPPER_ABI = [
   "function setApprovalForAll(address operator, bool approved) external",
   "function isApprovedForAll(address account, address operator) external view returns (bool)",
   "function allFusesBurned(bytes32 node, uint32 fuseMask) external view returns (bool)",
-  "function getData(uint256 id) external view returns (address owner, uint32 fuses, uint64 expiry)"
+  "function getData(uint256 id) external view returns (address owner, uint32 fuses, uint64 expiry)",
+  "function canModifyName(bytes32 node, address addr) external view returns (bool)"
 ] as const;
 
 function resolveParentNode(ethersLib: typeof import("ethers")): string {
   const parentNode = process.env.PARENT_NODE;
   const parentName = process.env.PARENT_NAME;
 
-  if (parentNode && parentNode !== "") return parentNode;
-  if (parentName && parentName !== "") return ethersLib.namehash(parentName);
+  if (parentNode && parentNode !== "") {
+    if (!/^0x[0-9a-fA-F]{64}$/.test(parentNode)) {
+      throw new Error(`PARENT_NODE must be a bytes32 hex value. Received: ${parentNode}`);
+    }
+
+    return parentNode;
+  }
+
+  if (parentName && parentName !== "") {
+    return ethersLib.namehash(parentName.trim().toLowerCase());
+  }
 
   throw new Error("Set PARENT_NAME or PARENT_NODE in your environment.");
 }
@@ -23,12 +34,20 @@ function resolveParentNode(ethersLib: typeof import("ethers")): string {
 const { ethers, networkName } = await network.connect();
 
 async function main() {
+  if (networkName !== "mainnet") {
+    throw new Error(`This script is intended for --network mainnet. Received: ${networkName}`);
+  }
+
   const wrapperAddress = process.env.ENS_NAME_WRAPPER || DEFAULT_WRAPPER;
   const registrarAddress = process.env.REGISTRAR_ADDRESS;
   const active = (process.env.ACTIVE || "true").toLowerCase() === "true";
 
-  if (!registrarAddress) {
-    throw new Error("Set REGISTRAR_ADDRESS in your environment.");
+  if (!isAddress(wrapperAddress)) {
+    throw new Error(`ENS_NAME_WRAPPER is not a valid address: ${wrapperAddress}`);
+  }
+
+  if (!registrarAddress || !isAddress(registrarAddress)) {
+    throw new Error("Set REGISTRAR_ADDRESS to a valid address in your environment.");
   }
 
   const parentNode = resolveParentNode(ethers);
@@ -42,12 +61,15 @@ async function main() {
   const parentLocked = await wrapper.allFusesBurned(parentNode, CANNOT_UNWRAP);
   const alreadyApproved = await wrapper.isApprovedForAll(parentOwner, registrarAddress);
   const signerIsParentOwner = parentOwner.toLowerCase() === signerAddress.toLowerCase();
+  const signerCanModifyParent = await wrapper.canModifyName(parentNode, signerAddress);
 
+  console.log("=== Parent Approval + Activation ===");
   console.log(`Network: ${networkName}`);
   console.log(`Signer: ${signerAddress}`);
   console.log(`Parent node: ${parentNode}`);
   console.log(`Wrapped parent owner: ${parentOwner}`);
   console.log(`Parent locked: ${parentLocked}`);
+  console.log(`Signer can modify parent: ${signerCanModifyParent}`);
   console.log(`Registrar: ${registrarAddress}`);
 
   if (active && !parentLocked) {
@@ -76,6 +98,7 @@ async function main() {
   await setupTx.wait();
 
   console.log(`Parent active = ${active}`);
+  console.log("Next: run npm run register:mainnet to create trial subnames.");
 }
 
 main().catch((error) => {
