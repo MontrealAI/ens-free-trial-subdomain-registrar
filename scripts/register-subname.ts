@@ -1,10 +1,18 @@
 import { network } from "hardhat";
 
+function hasFlag(name: string): boolean {
+  return process.argv.includes(`--${name}`);
+}
+
 function readFlag(name: string): string | undefined {
   const key = `--${name}`;
   const index = process.argv.indexOf(key);
   if (index === -1) return undefined;
-  return process.argv[index + 1];
+
+  const value = process.argv[index + 1];
+  if (!value || value.startsWith("--")) return undefined;
+
+  return value;
 }
 
 function resolveParentNode(ethersLib: typeof import("ethers")): string {
@@ -48,13 +56,13 @@ function requireAddress(name: string, value: string | undefined, ethersLib: type
   return value;
 }
 
-const { ethers, networkName } = await network.connect();
-
 async function main() {
-  if (readFlag("help") !== undefined) {
+  if (hasFlag("help")) {
     printUsage();
     return;
   }
+
+  const { ethers, networkName } = await network.connect();
 
   const registrarAddress = requireAddress("REGISTRAR_ADDRESS", readFlag("registrar") || process.env.REGISTRAR_ADDRESS, ethers);
   const label = readFlag("label") || process.env.LABEL;
