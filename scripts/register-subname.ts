@@ -52,13 +52,13 @@ function requireAddress(name: string, value: string | undefined, ethersLib: type
   return value;
 }
 
-const { ethers, networkName } = await network.connect();
-
 async function main() {
   if (hasFlag("help")) {
     printUsage();
     return;
   }
+
+  const { ethers, networkName } = await network.connect();
 
   const registrarAddress = requireAddress("REGISTRAR_ADDRESS", readFlag("registrar") || process.env.REGISTRAR_ADDRESS, ethers);
   const label = readFlag("label") || process.env.LABEL;
