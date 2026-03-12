@@ -40,6 +40,7 @@ async function main() {
   const registrarAddress = requireAddress("REGISTRAR_ADDRESS", process.env.REGISTRAR_ADDRESS, ethers);
   const active = (process.env.ACTIVE || "true").toLowerCase() === "true";
   const parentNode = resolveParentNode(ethers);
+  const parentName = process.env.PARENT_NAME;
 
   const chainId = (await ethers.provider.getNetwork()).chainId;
   if (chainId !== BigInt(MAINNET_CHAIN_ID)) {
@@ -113,6 +114,18 @@ async function main() {
 
   console.log(`Parent active = ${active}`);
   console.log("Done.");
+  if (active) {
+    console.log("Next steps:");
+    if (parentName) {
+      console.log(
+        `1) Register a first-degree label only, e.g. --parent-name ${parentName} --label 12345678 (creates 12345678.${parentName}).`
+      );
+    } else {
+      console.log("1) Register a first-degree label only (single label, no dots). Example: --label 12345678.");
+    }
+    console.log("2) Do not pass a full ENS name to --label.");
+    console.log("3) Run: npm run register:mainnet -- --help");
+  }
 }
 
 main().catch((error) => {

@@ -108,7 +108,7 @@ contract FreeTrialSubdomainRegistrar is ERC1155Holder, ReentrancyGuard {
 
     /// @notice Registers a free trial subname.
     /// @param parentNode Wrapped ENS parent node.
-    /// @param label Lowercase alphanumeric label, length 8..63.
+    /// @param label Lowercase alphanumeric label, length 8..63 (single first-degree label only, no dots).
     /// @param newOwner Final owner of the wrapped subname.
     /// @param resolver Resolver address, or zero address if no resolver is needed.
     /// @param ownerControlledFuses Optional owner-controlled fuses. CANNOT_UNWRAP is always forced on.
@@ -159,7 +159,7 @@ contract FreeTrialSubdomainRegistrar is ERC1155Holder, ReentrancyGuard {
         }
     }
 
-    /// @notice Pure label validator for frontends and scripts.
+    /// @notice Pure label validator for frontends and scripts (rejects dots/full names by charset rules).
     function validateLabel(string calldata label) external pure returns (bool) {
         return _isValidLabel(label);
     }
