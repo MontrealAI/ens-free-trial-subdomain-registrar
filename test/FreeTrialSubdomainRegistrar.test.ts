@@ -443,4 +443,85 @@ describe("FreeTrialSubdomainRegistrar", function () {
     }
   });
 
+
+  it("supports Etherscan-friendly registerSimple", async function () {
+    const { registrar, wrapper, parentNode, user } = await deployFixture();
+    const now = await latestTimestamp();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
+
+    await registrar.registerSimple(parentNode, "12345678", user.address);
+
+    const childNode = ethers.keccak256(
+      ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("12345678"))])
+    );
+
+    const [owner, fuses] = await wrapper.getData(childNode);
+    expect(owner).to.equal(user.address);
+    expect(BigInt(fuses) & CANNOT_UNWRAP).to.equal(CANNOT_UNWRAP);
+  });
+
+  it("lifecycle: authorized activate/deactivate/remove toggles minting", async function () {
+    const { registrar, wrapper, parentNode, user } = await deployFixture();
+    const now = await latestTimestamp();
+
+    await wrapper.setNameData(parentNode, await wrapper.getAddress(), Number(CANNOT_UNWRAP), Number(now + THIRTY_DAYS + 1000n), true);
+    await wrapper.setCanModify(parentNode, await registrar.getAddress(), true);
+    await wrapper.setCanModify(parentNode, (await ethers.getSigners())[0].address, true);
+
+    await registrar.activateParent(parentNode);
+    expect(await registrar.isParentActive(parentNode)).to.equal(true);
+
+    await registrar.registerSimple(parentNode, "12345678", user.address);
+
+    await registrar.deactivateParent(parentNode);
+    expect(await registrar.isParentActive(parentNode)).to.equal(false);
+
+    await expect(
+      registrar.registerSimple(parentNode, "ethereum", user.address)
+    ).to.be.revertedWithCustomError(registrar, "ParentNameNotActive");
+
+    await registrar.activateParent(parentNode);
+    await registrar.removeParent(parentNode);
+    expect(await registrar.isParentActive(parentNode)).to.equal(false);
+
+    await expect(
+      registrar.registerSimple(parentNode, "ethereum", user.address)
+    ).to.be.revertedWithCustomError(registrar, "ParentNameNotActive");
+  });
+
+  it("lifecycle functions reject unauthorized callers", async function () {
+    const { registrar, wrapper, parentNode, user } = await deployFixture();
+    const now = await latestTimestamp();
+    await wrapper.setNameData(parentNode, await wrapper.getAddress(), Number(CANNOT_UNWRAP), Number(now + THIRTY_DAYS + 1000n), true);
+    await wrapper.setCanModify(parentNode, await registrar.getAddress(), true);
+
+    await expect(
+      (registrar.connect(user) as any).activateParent(parentNode)
+    ).to.be.revertedWithCustomError(registrar, "Unauthorised");
+
+    await expect(
+      (registrar.connect(user) as any).deactivateParent(parentNode)
+    ).to.be.revertedWithCustomError(registrar, "Unauthorised");
+
+    await expect(
+      (registrar.connect(user) as any).removeParent(parentNode)
+    ).to.be.revertedWithCustomError(registrar, "Unauthorised");
+  });
+
+  it("getParentStatus reports non-reverting status helpers", async function () {
+    const { registrar, wrapper, parentNode } = await deployFixture();
+    const now = await latestTimestamp();
+    await wrapper.setNameData(parentNode, await wrapper.getAddress(), Number(CANNOT_UNWRAP), Number(now + THIRTY_DAYS + 1000n), true);
+    await wrapper.setCanModify(parentNode, await registrar.getAddress(), true);
+    await wrapper.setCanModify(parentNode, (await ethers.getSigners())[0].address, true);
+
+    await registrar.activateParent(parentNode);
+    const status = await registrar.getParentStatus(parentNode);
+    expect(status[0]).to.equal(true); // active
+    expect(status[1]).to.equal(true); // locked
+    expect(status[2]).to.equal(true); // registrar authorised
+    expect(status[3]).to.equal(true); // parent usable
+    expect(BigInt(status[4])).to.be.greaterThan(0n); // effective expiry
+  });
+
 });
