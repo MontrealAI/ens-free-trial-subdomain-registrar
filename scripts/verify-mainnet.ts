@@ -37,6 +37,18 @@ function looksAlreadyVerified(message: string): boolean {
   return lower.includes("already verified") || lower.includes("already been verified");
 }
 
+function isMissingFileError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
+}
+
+function assertManifestAddressMatches(manifestPath: string, manifestAddress: string, targetAddress: string): void {
+  if (manifestAddress.toLowerCase() !== targetAddress.toLowerCase()) {
+    throw new Error(
+      `Manifest/address mismatch: ${manifestPath} contains contractAddress=${manifestAddress} but --address=${targetAddress}. Refusing to continue.`
+    );
+  }
+}
+
 async function resolveManifest(manifestPathArg: string | undefined, address: string): Promise<{ manifestPath?: string; manifest?: DeploymentManifest }> {
   if (manifestPathArg) {
     const manifest = await readDeploymentManifest(manifestPathArg);
@@ -47,7 +59,10 @@ async function resolveManifest(manifestPathArg: string | undefined, address: str
   try {
     const manifest = await readDeploymentManifest(inferredPath);
     return { manifestPath: inferredPath, manifest };
-  } catch {
+  } catch (error) {
+    if (!isMissingFileError(error)) {
+      throw error;
+    }
     return {};
   }
 }
@@ -69,6 +84,10 @@ async function main() {
   const manifestPathArg = readFlagValue(process.argv, "manifest");
 
   const { manifestPath, manifest } = await resolveManifest(manifestPathArg, address);
+  if (manifestPath && manifest) {
+    assertManifestAddressMatches(manifestPath, requireAddress("manifest.contractAddress", manifest.contractAddress), address);
+  }
+
   const constructorWrapper = wrapperAddress || manifest?.constructorArgs?.[0] || process.env.ENS_NAME_WRAPPER || DEFAULT_WRAPPER;
 
   if (!ethers.isAddress(constructorWrapper)) {
