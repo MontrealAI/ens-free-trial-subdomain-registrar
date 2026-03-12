@@ -10,15 +10,17 @@
   "scripts": {
     "build": "hardhat compile",
     "build:dev": "hardhat compile",
+    "build:production": "hardhat compile",
     "ci": "npm run build && npm run test && npm run typecheck",
     "clean": "hardhat clean",
     "deploy:mainnet": "hardhat run scripts/deploy-mainnet.ts --network mainnet",
+    "deploy-and-verify:mainnet": "node scripts/deploy-and-verify-mainnet.js",
     "doctor:mainnet": "hardhat run scripts/mainnet-doctor.ts --network mainnet",
     "register:mainnet": "hardhat run scripts/register-subname.ts --network mainnet",
     "setup:parent:mainnet": "hardhat run scripts/approve-and-setup-parent.ts --network mainnet",
     "test": "hardhat test",
     "typecheck": "tsc --noEmit",
-    "verify:mainnet": "hardhat verify --network mainnet"
+    "verify:mainnet": "hardhat run scripts/verify-mainnet.ts --network mainnet"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
