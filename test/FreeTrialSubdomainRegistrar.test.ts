@@ -144,6 +144,37 @@ describe("FreeTrialSubdomainRegistrar", function () {
       registrar.register(parentNode, "trialpass8", user.address, await resolver.getAddress(), 0, [payload])
     ).to.be.revertedWithCustomError(registrar, "InvalidRecordPayload");
   });
+  it("accepts flagship first-degree labels 12345678 and ethereum", async function () {
+    const { registrar, wrapper, parentNode, now, user } = await deployFixture();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 2000n);
+
+    await registrar.register(parentNode, "12345678", user.address, ethers.ZeroAddress, 0, []);
+    await registrar.register(parentNode, "ethereum", user.address, ethers.ZeroAddress, 0, []);
+
+    const nodeA = ethers.keccak256(
+      ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("12345678"))])
+    );
+    const nodeB = ethers.keccak256(
+      ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("ethereum"))])
+    );
+
+    expect(await registrar.available(nodeA)).to.equal(false);
+    expect(await registrar.available(nodeB)).to.equal(false);
+  });
+
+  it("rejects dotted and full-name label inputs (first-degree only)", async function () {
+    const { registrar, wrapper, parentNode, now, user } = await deployFixture();
+    await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);
+
+    await expect(
+      registrar.register(parentNode, "ethereum.12345678", user.address, ethers.ZeroAddress, 0, [])
+    ).to.be.revertedWithCustomError(registrar, "InvalidLabelCharacter");
+
+    await expect(
+      registrar.register(parentNode, "12345678.alpha.agent.agi.eth", user.address, ethers.ZeroAddress, 0, [])
+    ).to.be.revertedWithCustomError(registrar, "InvalidLabelCharacter");
+  });
+
   it("rejects short labels", async function () {
     const { registrar, wrapper, parentNode, now, user } = await deployFixture();
     await activateParent(wrapper, registrar, parentNode, now + THIRTY_DAYS + 1000n);

@@ -94,6 +94,15 @@ ACTIVE=true
 
 ## 7) Mainnet runbook
 
+### Flagship walkthrough: `alpha.agent.agi.eth`
+
+For a fully worked, non-technical-operator-friendly example using the real parent name `alpha.agent.agi.eth`, see:
+
+- [`docs/use-cases/alpha-agent-agi-eth.md`](docs/use-cases/alpha-agent-agi-eth.md)
+
+This walkthrough includes copy-paste commands, allowed vs forbidden labels, first-degree-only semantics, expiry behavior, and troubleshooting.
+
+
 ### Step A — Deploy
 
 ```bash
@@ -126,6 +135,9 @@ ACTIVE=false npm run setup:parent:mainnet
 ```
 
 ### Step D — Register subname
+
+`--label` must be a single first-degree label only (`[a-z0-9]{8,63}`), never a full ENS name and never dotted.
+
 
 ```bash
 npm run register:mainnet -- \
