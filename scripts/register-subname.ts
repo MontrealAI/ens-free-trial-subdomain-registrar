@@ -1,4 +1,5 @@
 import { network } from "hardhat";
+import { validateSingleLabelInput } from "./lib-label-input.js";
 
 const MAINNET_CHAIN_ID = 1n;
 
@@ -49,6 +50,9 @@ function printUsage(): void {
   console.log(`Usage:
   npm run register:mainnet -- --registrar 0x... --parent-name example.eth --label trialpass8 [--owner 0x...] [--resolver 0x...] [--fuses 0] [--records "[]"]
 
+Important: --label is one label only (first-degree subname). Do not pass dots.
+Example: --parent-name alpha.agent.agi.eth --label 12345678
+
 Flags can also be provided through .env (see .env.example).`);
 }
 
@@ -78,6 +82,7 @@ async function main() {
     printUsage();
     throw new Error("Provide --label or set LABEL.");
   }
+  validateSingleLabelInput(label);
 
   const [signer] = await ethers.getSigners();
   const signerAddress = await signer.getAddress();
@@ -119,7 +124,9 @@ async function main() {
 
   const isValid = await registrar.validateLabel(label);
   if (!isValid) {
-    throw new Error("Invalid label. Use lowercase letters and numbers only, length 8 to 63.");
+    throw new Error(
+      "Invalid label. Use a single lowercase alphanumeric label ([a-z0-9]{8,63}), e.g. --parent-name alpha.agent.agi.eth --label 12345678."
+    );
   }
 
   const parentActive = await registrar.activeParents(parentNode);
@@ -152,12 +159,12 @@ async function main() {
   const tx = await registrar.register(parentNode, label, newOwner, resolver, ownerControlledFuses, records);
   await tx.wait();
 
-
   console.log("Done.");
   console.log(`Subname node: ${node}`);
   if (parentName) {
     console.log(`Human name: ${label}.${parentName}`);
   }
+  console.log("Next step: open ENS Manager / ENS App and search the full subname to confirm owner, fuses, and expiry.");
 }
 
 main().catch((error) => {
