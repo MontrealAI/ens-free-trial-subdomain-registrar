@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 const { spawnSync } = require('node:child_process');
+require('dotenv').config();
 
 const target = process.argv[2];
 if (!target) {
