@@ -56,3 +56,10 @@
 - Call out assumptions and anything not verified on live chain.
 - Include exact files changed and rationale.
 - Highlight security-sensitive changes (expiry math, fuses, authorization, value handling).
+
+
+## Release / tagging expectations
+- Use semantic version tags (`vMAJOR.MINOR.PATCH`).
+- Keep `CHANGELOG.md`, `docs/mainnet-deployment.md`, and release notes in sync before tagging.
+- Attach `release-assets/mainnet-deployment.json` (or updated deployment metadata) to GitHub releases.
+- Prefer explicit `gh release create ... --notes-file ...` commands documented in `docs/release-process.md`.
