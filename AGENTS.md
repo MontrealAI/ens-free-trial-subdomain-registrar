@@ -1,14 +1,16 @@
 # AGENTS.md
 
 ## Repository layout
-- `contracts/` — core registrar + test mocks.
-- `scripts/` — mainnet operational scripts (`deploy-mainnet.ts`, `approve-and-setup-parent.ts`, `register-subname.ts`).
-- `scripts/utils/` — shared script helpers (including label validation).
-- `test/` — Hardhat tests for contract behavior and script-side validation helpers.
-- `docs/use-cases/` — operator walkthroughs (flagship: `alpha-agent-agi-eth.md`).
+- `contracts/` — core contracts (`FreeTrialSubdomainRegistrar` legacy + `FreeTrialSubdomainRegistrarIdentity` flagship).
+- `contracts/test/` — mock ENS wrapper/resolver used by Hardhat tests.
+- `scripts/` — mainnet operations (deploy/verify/setup/register/doctor).
+- `scripts/utils/` — shared CLI and safety helpers.
+- `test/` — contract and script utility tests.
+- `docs/` — deployment, release, contract, and operator docs.
 
 ## Environment
-- Required runtime: **Node.js 20.19.6** (do not require Node 22+).
+- Required runtime: **Node.js 20.19.6**.
+- Solidity compiler target: **0.8.24**, optimizer enabled (runs 200), viaIR false.
 
 ## Canonical commands
 - Install: `npm ci`
@@ -16,50 +18,33 @@
 - Production build: `npm run build:production`
 - Test: `npm test`
 - Typecheck: `npm run typecheck`
-- Full CI-like local check: `npm run ci`
-- Deploy registrar (mainnet): `npm run deploy:mainnet`
-- Deploy + verify (mainnet): `npm run deploy-and-verify:mainnet`
-- Verify registrar (mainnet): `npm run verify:mainnet -- --address 0x...`
-- Approve + activate/deactivate parent: `npm run setup:parent:mainnet`
-- Register subname: `npm run register:mainnet -- --help`
-- Read-only mainnet preflight: `npm run doctor:mainnet -- --help`
+- Full check: `npm run ci`
+- Deploy (mainnet): `npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --contract identity|legacy`
+- Verify (mainnet): `npm run verify:mainnet -- --address 0x... --contract identity|legacy`
+- Setup parent for registrar flow: `npm run setup:parent:mainnet`
+- Register helper (legacy registrar flow): `npm run register:mainnet -- --help`
+- Read-only doctor: `npm run doctor:mainnet -- --help`
+
+## Live release vs next release
+- Current live release: `v1.0.0` (`FreeTrialSubdomainRegistrar` at `0x7aAE649184182A01Ac7D8D5d7873903015C08761`).
+- Next planned flagship release: `FreeTrialSubdomainRegistrarIdentity` (deployment pending until real onchain metadata is added).
+- Never invent deployment data or release claims.
 
 ## Product invariants (non-negotiable)
-1. Free-trial ENS registrar; registration stays free.
-2. Child expiry must be `min(block.timestamp + 30 days, parent effective expiry)`.
-3. Child gets no grace period of its own.
-4. For `.eth` parents, grace only affects parent effective expiry cap; it must never extend child beyond 30 days.
-5. Never grant child owner `CAN_EXTEND_EXPIRY`.
-6. Child owner cannot renew/self-extend through this system.
-7. Labels must stay lowercase alphanumeric only, 8–63 chars.
-8. First-degree labels only: input is a single label, never a full ENS name.
-9. Script/UX must reject dotted labels with a clear human-friendly error.
-10. Keep protocol logic generic; do not hardcode `alpha.agent.agi.eth` into contracts.
+1. ENS-based protocol remains the core primitive.
+2. Free registration.
+3. Child expiry = `min(block.timestamp + 30 days, parent effective expiry)`.
+4. No child grace period.
+5. `.eth` grace only affects parent cap, not child > 30 days.
+6. Never grant child `CAN_EXTEND_EXPIRY`; no child self-renew path.
+7. Labels are single-label only, lowercase alphanumeric, 8–63 chars.
+8. Dotted labels/full ENS names as label input must be rejected.
+9. Identity NFT is soulbound.
+10. ENS wrapped owner and identity NFT owner must stay aligned (`syncIdentity` / `claimIdentity` behavior).
 
 ## Conventions
 - Prefer explicit, low-surprise, minimal diffs.
-- Keep state-changing scripts mainnet-gated unless intentionally changing that policy.
-- If behavior changes, update tests and relevant docs in the same patch.
-- Preserve existing custom errors/revert style unless there is a strong reason.
-
-## Do not
-- Do not add fees, renewal paths, upgradeability, governance, or extra admin powers.
-- Do not weaken label restrictions or trial expiry guarantees.
-- Do not merge UX examples into hardcoded protocol behavior.
-
-## Verification / done criteria
-- Run relevant checks after edits (`npm run build`, `npm test`, `npm run typecheck`, plus targeted scripts/tests as needed).
-- Confirm docs and examples match actual CLI behavior.
-- Ensure alpha walkthrough remains a flagship example while registrar stays reusable.
-
-## Review expectations
-- Call out assumptions and anything not verified on live chain.
-- Include exact files changed and rationale.
-- Highlight security-sensitive changes (expiry math, fuses, authorization, value handling).
-
-
-## Release / tagging expectations
-- Use semantic version tags (`vMAJOR.MINOR.PATCH`).
-- Keep `CHANGELOG.md`, `docs/mainnet-deployment.md`, and release notes in sync before tagging.
-- Attach `release-assets/mainnet-deployment.json` (or updated deployment metadata) to GitHub releases.
-- Prefer explicit `gh release create ... --notes-file ...` commands documented in `docs/release-process.md`.
+- Keep state-changing scripts mainnet-gated.
+- Update tests/docs when behavior changes.
+- Re-run relevant build/test/typecheck after edits.
+- Preserve existing custom errors and revert style unless there is strong reason.
