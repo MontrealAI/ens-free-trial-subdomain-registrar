@@ -141,7 +141,7 @@ async function main() {
           status,
           verifiedAt: status === "verified" ? new Date().toISOString() : undefined,
           explorerUrl: `https://etherscan.io/address/${address}#code`,
-          notes: notes || current.verification.notes
+          notes: status === "verified" ? (notes || undefined) : (notes || current.verification.notes)
         }
       }));
       console.log(`Updated manifest verification status: ${status}`);
