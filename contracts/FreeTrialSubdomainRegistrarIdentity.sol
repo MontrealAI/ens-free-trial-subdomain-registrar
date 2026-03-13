@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
 
-import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
+import {Pausable} from "@openzeppelin/contracts/security/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 
@@ -11,7 +13,7 @@ uint32 constant CANNOT_TRANSFER = 1 << 2;
 uint32 constant PARENT_CANNOT_CONTROL = 1 << 16;
 uint32 constant IS_DOT_ETH = 1 << 17;
 
-interface INameWrapperIdentity {
+interface INameWrapper {
     function canModifyName(bytes32 node, address addr) external view returns (bool);
     function getData(uint256 id) external view returns (address owner, uint32 fuses, uint64 expiry);
     function allFusesBurned(bytes32 node, uint32 fuseMask) external view returns (bool);
@@ -26,48 +28,72 @@ interface INameWrapperIdentity {
     ) external returns (bytes32);
 }
 
+interface IENSRegistry {
+    function resolver(bytes32 node) external view returns (address);
+}
+
 interface IERC5192 {
+    event Locked(uint256 tokenId);
+
     function locked(uint256 tokenId) external view returns (bool);
 }
 
-error Unauthorised(bytes32 node);
-error ParentNotWrapped(bytes32 parentNode);
-error ParentNameNotActive(bytes32 parentNode);
-error ParentNotLocked(bytes32 parentNode);
-error RegistrarNotAuthorised(bytes32 parentNode);
-error ParentExpired(bytes32 parentNode);
-error Unavailable(bytes32 node);
-error InvalidOwner();
+error InvalidAddress();
+error InvalidParentName();
+error InvalidParentNode();
+error ParentNotWrapped();
+error ParentExpired();
+error ParentNotLocked();
+error RegistrarNotAuthorised();
+error RootInactive();
 error LabelTooShort(uint256 length);
 error LabelTooLong(uint256 length);
-error DottedLabelNotAllowed(uint256 index);
 error InvalidLabelCharacter(uint256 index, bytes1 character);
-error EtherNotAccepted();
-error InvalidWrapper();
-error Soulbound();
+error NameUnavailable(bytes32 node);
+error WrappedOwnerMismatch(address expected, address actual);
 error IdentityNotEligible(uint256 tokenId);
 error IdentityAlreadyAligned(uint256 tokenId);
+error Soulbound();
+error EtherNotAccepted();
 error NonexistentToken(uint256 tokenId);
 
-contract FreeTrialSubdomainRegistrarIdentity is ERC721, ReentrancyGuard, IERC5192 {
-    using Address for address;
+contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, ReentrancyGuard, IERC5192 {
+    using Strings for uint256;
 
     uint64 public constant TRIAL_PERIOD = 30 days;
     uint64 public constant PARENT_GRACE_PERIOD = 90 days;
     uint256 public constant MIN_LABEL_LENGTH = 8;
     uint256 public constant MAX_LABEL_LENGTH = 63;
 
-    INameWrapperIdentity public immutable wrapper;
-    mapping(bytes32 => bool) public activeParents;
+    INameWrapper public immutable wrapper;
+    IENSRegistry public immutable ensRegistry;
+    bytes32 public immutable parentNode;
+    string public parentName;
 
-    event ParentConfigured(bytes32 indexed parentNode, bool active);
-    event IdentityRegistered(bytes32 indexed parentNode, bytes32 indexed node, address indexed owner, string label, uint64 expiry);
-    event IdentityClaimed(bytes32 indexed node, address indexed owner);
+    bool public rootActive;
+
+    mapping(uint256 => uint64) public mintedAt;
+    mapping(uint256 => string) private _tokenLabels;
+
+    event RootActivationSet(bool active);
+    event IdentityRegistered(address indexed registrant, string label, bytes32 indexed node, uint64 expiry);
+    event IdentityClaimed(address indexed owner, string label, bytes32 indexed node);
     event IdentitySynced(uint256 indexed tokenId, bool burned, address wrappedOwner, uint64 wrappedExpiry);
 
-    constructor(address wrapper_) ERC721("ENS Free Trial Identity", "ENSID") {
-        if (wrapper_ == address(0)) revert InvalidWrapper();
-        wrapper = INameWrapperIdentity(wrapper_);
+    constructor(address nameWrapper, address registry, bytes32 configuredParentNode, string memory configuredParentName)
+        ERC721("Alpha Agent Identity", "AAI")
+    {
+        if (nameWrapper == address(0) || registry == address(0)) revert InvalidAddress();
+        if (configuredParentNode == bytes32(0)) revert InvalidParentNode();
+
+        string memory normalizedParent = _toLower(configuredParentName);
+        if (bytes(normalizedParent).length == 0) revert InvalidParentName();
+        if (_namehash(normalizedParent) != configuredParentNode) revert InvalidParentNode();
+
+        wrapper = INameWrapper(nameWrapper);
+        ensRegistry = IENSRegistry(registry);
+        parentNode = configuredParentNode;
+        parentName = normalizedParent;
     }
 
     receive() external payable {
@@ -78,128 +104,146 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, ReentrancyGuard, IERC519
         revert EtherNotAccepted();
     }
 
-    modifier authorised(bytes32 node) {
-        if (!wrapper.canModifyName(node, msg.sender)) revert Unauthorised(node);
-        _;
-    }
-
-    function setupDomain(bytes32 parentNode, bool active) external authorised(parentNode) {
+    function setRootActive(bool active) external onlyOwner {
         if (active) {
-            _activateParent(parentNode);
-            return;
+            _requireParentReady();
         }
-
-        activeParents[parentNode] = false;
-        emit ParentConfigured(parentNode, false);
+        rootActive = active;
+        emit RootActivationSet(active);
     }
 
-    function registerIdentity(bytes32 parentNode, string calldata label, address newOwner) external payable nonReentrant returns (uint256 tokenId) {
-        if (msg.value != 0) revert EtherNotAccepted();
-        if (!activeParents[parentNode]) revert ParentNameNotActive(parentNode);
-        if (newOwner == address(0)) revert InvalidOwner();
+    function pause() external onlyOwner {
+        _pause();
+    }
 
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
+    function register(string calldata label) external whenNotPaused nonReentrant returns (uint256 tokenId) {
+        if (!rootActive) revert RootInactive();
         _validateLabel(label);
+        _requireParentReady();
 
-        uint64 expiry = _trialExpiry(parentNode);
-        _requireParentLocked(parentNode);
-        _requireRegistrarAuthorised(parentNode);
+        bytes32 node = _nodeForLabel(label);
+        (address wrappedOwner,, uint64 wrappedExpiry) = _wrappedState(node);
+        if (wrappedOwner != address(0) && wrappedExpiry > block.timestamp) revert NameUnavailable(node);
 
-        bytes32 node = keccak256(abi.encodePacked(parentNode, keccak256(bytes(label))));
-        if (!available(node)) revert Unavailable(node);
+        uint64 expiry = _childExpiry();
+        uint32 childFuses = CANNOT_UNWRAP | CANNOT_TRANSFER | PARENT_CANNOT_CONTROL;
+        wrapper.setSubnodeRecord(parentNode, label, msg.sender, address(0), 0, childFuses, expiry);
 
-        uint32 wrappedFuses = CANNOT_UNWRAP | CANNOT_TRANSFER | PARENT_CANNOT_CONTROL;
-        wrapper.setSubnodeRecord(parentNode, label, newOwner, address(0), 0, wrappedFuses, expiry);
+        (address ownerAfter,,) = _wrappedState(node);
+        if (ownerAfter != msg.sender) revert WrappedOwnerMismatch(msg.sender, ownerAfter);
 
         tokenId = uint256(node);
-        _mintOrReconcile(tokenId, newOwner);
-        emit IdentityRegistered(parentNode, node, newOwner, label, expiry);
+        _mintOrAlign(tokenId, msg.sender, label);
+
+        emit IdentityRegistered(msg.sender, label, node, expiry);
     }
 
-    function claimIdentity(bytes32 node) external nonReentrant returns (uint256 tokenId) {
+    function claimIdentity(string calldata label) external nonReentrant returns (uint256 tokenId) {
+        _validateLabel(label);
+        bytes32 node = _nodeForLabel(label);
         tokenId = uint256(node);
+
         (address wrappedOwner,, uint64 expiry) = _wrappedState(node);
         if (wrappedOwner == address(0) || expiry <= block.timestamp || wrappedOwner != msg.sender) {
             revert IdentityNotEligible(tokenId);
         }
 
-        if (_exists(tokenId)) {
-            address current = ownerOf(tokenId);
-            if (current == wrappedOwner) revert IdentityAlreadyAligned(tokenId);
-            _burn(tokenId);
+        if (_exists(tokenId) && ownerOf(tokenId) == wrappedOwner) {
+            revert IdentityAlreadyAligned(tokenId);
         }
 
-        _mint(wrappedOwner, tokenId);
-        emit IdentityClaimed(node, wrappedOwner);
+        _mintOrAlign(tokenId, wrappedOwner, label);
+        emit IdentityClaimed(wrappedOwner, label, node);
     }
 
     function syncIdentity(uint256 tokenId) external {
-        if (!_exists(tokenId)) revert NonexistentToken(tokenId);
-
-        (address wrappedOwner,, uint64 expiry) = _wrappedState(bytes32(tokenId));
-        bool burnIdentity = wrappedOwner == address(0) || expiry <= block.timestamp || ownerOf(tokenId) != wrappedOwner;
-
-        if (burnIdentity) {
-            _burn(tokenId);
-        }
-
-        emit IdentitySynced(tokenId, burnIdentity, wrappedOwner, expiry);
+        _syncIdentity(tokenId);
     }
 
-    function available(bytes32 node) public view returns (bool) {
-        (, , uint64 expiry) = _wrappedState(node);
+    function syncIdentityByLabel(string calldata label) external {
+        _validateLabel(label);
+        _syncIdentity(uint256(_nodeForLabel(label)));
+    }
+
+    function available(string calldata label) external view returns (bool) {
+        _validateLabel(label);
+        (, , uint64 expiry) = _wrappedState(_nodeForLabel(label));
         return expiry <= block.timestamp;
     }
 
+    function preview(string calldata label)
+        external
+        view
+        returns (
+            string memory fullName,
+            bytes32 node,
+            uint256 tokenId,
+            uint64 expectedExpiry,
+            bool isAvailable,
+            address wrappedOwner,
+            address resolver,
+            bool active
+        )
+    {
+        _validateLabel(label);
+        node = _nodeForLabel(label);
+        tokenId = uint256(node);
+        uint64 wrappedExpiry;
+        (wrappedOwner,, wrappedExpiry) = _wrappedState(node);
+        expectedExpiry = _previewChildExpiry();
+        isAvailable = wrappedExpiry <= block.timestamp;
+        resolver = ensRegistry.resolver(node);
+        active = rootActive;
+        fullName = _fullName(label);
+    }
+
     function validateLabel(string calldata label) external pure returns (bool) {
-        bytes memory labelBytes = bytes(label);
-        uint256 length = labelBytes.length;
+        bytes memory b = bytes(label);
+        uint256 length = b.length;
         if (length < MIN_LABEL_LENGTH || length > MAX_LABEL_LENGTH) return false;
 
         for (uint256 i = 0; i < length; ) {
-            bytes1 character = labelBytes[i];
-            bool isNumber = character >= 0x30 && character <= 0x39;
-            bool isLowerAlpha = character >= 0x61 && character <= 0x7A;
-            if (!isNumber && !isLowerAlpha) return false;
+            bytes1 char = b[i];
+            bool isNumber = char >= 0x30 && char <= 0x39;
+            bool isLower = char >= 0x61 && char <= 0x7a;
+            if (!isNumber && !isLower) return false;
             unchecked {
                 ++i;
             }
         }
-
         return true;
-    }
-
-    function tokenURI(uint256 tokenId) public view override returns (string memory) {
-        if (!_exists(tokenId)) revert NonexistentToken(tokenId);
-
-        bytes32 node = bytes32(tokenId);
-        string memory tokenIdText = _toHexString(node);
-        string memory ownerText = _toHexAddress(ownerOf(tokenId));
-
-        string memory image = string.concat(
-            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 360"><rect width="600" height="360" fill="#111"/>',
-            '<text x="28" y="66" fill="#fff" font-size="22">ENS Identity</text>',
-            '<text x="28" y="106" fill="#7ee787" font-size="16">tokenId = uint256(node)</text>',
-            '<text x="28" y="146" fill="#9da7b3" font-size="13">node:</text>',
-            '<text x="28" y="170" fill="#fff" font-size="12">', tokenIdText, '</text>',
-            '<text x="28" y="210" fill="#9da7b3" font-size="13">owner:</text>',
-            '<text x="28" y="234" fill="#fff" font-size="12">', ownerText, '</text></svg>'
-        );
-
-        string memory encodedImage = Base64.encode(bytes(image));
-
-        string memory json = string.concat(
-            '{"name":"ENS Identity #', tokenIdText,
-            '","description":"Soulbound ENS-linked identity minted by FreeTrialSubdomainRegistrarIdentity.",',
-            '"attributes":[{"trait_type":"Soulbound","value":"true"}],',
-            '"image":"data:image/svg+xml;base64,', encodedImage, '"}'
-        );
-
-        return string.concat("data:application/json;base64,", Base64.encode(bytes(json)));
     }
 
     function locked(uint256 tokenId) external view returns (bool) {
         if (!_exists(tokenId)) revert NonexistentToken(tokenId);
         return true;
+    }
+
+    function tokenURI(uint256 tokenId) public view override returns (string memory) {
+        if (!_exists(tokenId)) revert NonexistentToken(tokenId);
+        string memory label = _tokenLabels[tokenId];
+        string memory fullName = _fullName(label);
+        string memory json = string(abi.encodePacked('{"name":"', fullName, '","description":"Soulbound ENS-linked identity","image":"data:image/svg+xml;base64,', Base64.encode(bytes('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><rect width="100" height="100" fill="#4b1f75"/></svg>')), '","attributes":[],"extension":', _extensionForToken(tokenId), '}'));
+        return string.concat("data:application/json;base64,", Base64.encode(bytes(json)));
+    }
+
+    function _extensionForToken(uint256 tokenId) internal view returns (string memory) {
+        bytes32 node = bytes32(tokenId);
+        string memory label = _tokenLabels[tokenId];
+        (, , uint64 expiry) = _wrappedState(node);
+
+        string memory out = string.concat('{"parent_node":"', Strings.toHexString(uint256(parentNode), 32));
+        out = string.concat(out, '","node":"', Strings.toHexString(uint256(node), 32));
+        out = string.concat(out, '","labelhash":"', Strings.toHexString(uint256(keccak256(bytes(label))), 32));
+        out = string.concat(out, '","owner":"', Strings.toHexString(ownerOf(tokenId)));
+        out = string.concat(out, '","resolver":"', Strings.toHexString(ensRegistry.resolver(node)));
+        out = string.concat(out, '","expiry_unix":', uint256(expiry).toString());
+        out = string.concat(out, ',"minted_at_unix":', uint256(mintedAt[tokenId]).toString());
+        return string.concat(out, ',"source":"onchain","ui_hint":"alpha-agent-identity"}');
     }
 
     function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
@@ -226,76 +270,74 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, ReentrancyGuard, IERC519
         revert Soulbound();
     }
 
-    function _activateParent(bytes32 parentNode) internal {
-        _trialExpiry(parentNode);
-        _requireParentLocked(parentNode);
-        _requireRegistrarAuthorised(parentNode);
-        activeParents[parentNode] = true;
-        emit ParentConfigured(parentNode, true);
-    }
 
-    function _mintOrReconcile(uint256 tokenId, address wrappedOwner) internal {
-        if (!_exists(tokenId)) {
-            _mint(wrappedOwner, tokenId);
-            return;
+    function _syncIdentity(uint256 tokenId) internal {
+        if (!_exists(tokenId)) revert NonexistentToken(tokenId);
+
+        (address wrappedOwner,, uint64 expiry) = _wrappedState(bytes32(tokenId));
+        bool burnIdentity = wrappedOwner == address(0) || expiry <= block.timestamp || ownerOf(tokenId) != wrappedOwner;
+
+        if (burnIdentity) {
+            _burnIdentity(tokenId);
         }
 
-        address current = ownerOf(tokenId);
-        if (current == wrappedOwner) return;
+        emit IdentitySynced(tokenId, burnIdentity, wrappedOwner, expiry);
+    }
 
+    function _mintOrAlign(uint256 tokenId, address owner, string memory label) internal {
+        if (_exists(tokenId)) {
+            _burnIdentity(tokenId);
+        }
+        _mint(owner, tokenId);
+        mintedAt[tokenId] = uint64(block.timestamp);
+        _tokenLabels[tokenId] = label;
+        emit Locked(tokenId);
+    }
+
+    function _burnIdentity(uint256 tokenId) internal {
         _burn(tokenId);
-        _mint(wrappedOwner, tokenId);
+        delete mintedAt[tokenId];
+        delete _tokenLabels[tokenId];
     }
 
-    function _trialExpiry(bytes32 parentNode) internal view returns (uint64) {
-        uint64 parentExpiry = _effectiveParentExpiry(parentNode);
-        uint64 nowTs = uint64(block.timestamp);
-        uint64 remaining = parentExpiry - nowTs;
-        uint64 duration = remaining > TRIAL_PERIOD ? TRIAL_PERIOD : remaining;
-        return nowTs + duration;
+    function _requireParentReady() internal view {
+        _effectiveParentExpiry();
+        if (!wrapper.allFusesBurned(parentNode, CANNOT_UNWRAP)) revert ParentNotLocked();
+        if (!wrapper.canModifyName(parentNode, address(this))) revert RegistrarNotAuthorised();
     }
 
-    function _effectiveParentExpiry(bytes32 parentNode) internal view returns (uint64 effectiveExpiry) {
-        try wrapper.getData(uint256(parentNode)) returns (address, uint32 fuses, uint64 expiry) {
-            effectiveExpiry = expiry;
-            if ((fuses & IS_DOT_ETH) == IS_DOT_ETH) {
-                if (expiry <= PARENT_GRACE_PERIOD) revert ParentExpired(parentNode);
-                effectiveExpiry = expiry - PARENT_GRACE_PERIOD;
-            }
-
-            if (effectiveExpiry <= block.timestamp) revert ParentExpired(parentNode);
+    function _previewChildExpiry() internal view returns (uint64) {
+        try this.previewChildExpiry() returns (uint64 expiry) {
+            return expiry;
         } catch {
-            revert ParentNotWrapped(parentNode);
+            return 0;
         }
     }
 
-    function _requireParentLocked(bytes32 parentNode) internal view {
-        if (!wrapper.allFusesBurned(parentNode, CANNOT_UNWRAP)) revert ParentNotLocked(parentNode);
+    function previewChildExpiry() external view returns (uint64) {
+        uint64 cap = _effectiveParentExpiry();
+        uint64 nowTs = uint64(block.timestamp);
+        uint64 trialCap = nowTs + TRIAL_PERIOD;
+        return cap < trialCap ? cap : trialCap;
     }
 
-    function _requireRegistrarAuthorised(bytes32 parentNode) internal view {
-        if (!wrapper.canModifyName(parentNode, address(this))) revert RegistrarNotAuthorised(parentNode);
+    function _childExpiry() internal view returns (uint64) {
+        uint64 cap = _effectiveParentExpiry();
+        uint64 nowTs = uint64(block.timestamp);
+        uint64 trialCap = nowTs + TRIAL_PERIOD;
+        return cap < trialCap ? cap : trialCap;
     }
 
-    function _validateLabel(string calldata label) internal pure {
-        bytes memory labelBytes = bytes(label);
-        uint256 length = labelBytes.length;
-
-        if (length < MIN_LABEL_LENGTH) revert LabelTooShort(length);
-        if (length > MAX_LABEL_LENGTH) revert LabelTooLong(length);
-
-        for (uint256 i = 0; i < length; ) {
-            bytes1 character = labelBytes[i];
-            if (character == 0x2e) revert DottedLabelNotAllowed(i);
-
-            bool isNumber = character >= 0x30 && character <= 0x39;
-            bool isLowerAlpha = character >= 0x61 && character <= 0x7A;
-            if (!isNumber && !isLowerAlpha) revert InvalidLabelCharacter(i, character);
-
-            unchecked {
-                ++i;
-            }
+    function _effectiveParentExpiry() internal view returns (uint64) {
+        (address owner, uint32 fuses, uint64 expiry) = _wrappedState(parentNode);
+        if (owner == address(0)) revert ParentNotWrapped();
+        uint64 effectiveExpiry = expiry;
+        if ((fuses & IS_DOT_ETH) != 0) {
+            if (expiry <= PARENT_GRACE_PERIOD) revert ParentExpired();
+            effectiveExpiry = expiry - PARENT_GRACE_PERIOD;
         }
+        if (effectiveExpiry <= block.timestamp) revert ParentExpired();
+        return effectiveExpiry;
     }
 
     function _wrappedState(bytes32 node) internal view returns (address owner, uint32 fuses, uint64 expiry) {
@@ -306,32 +348,76 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, ReentrancyGuard, IERC519
         }
     }
 
-    function _toHexString(bytes32 value) internal pure returns (string memory) {
-        bytes16 alphabet = 0x30313233343536373839616263646566;
-        bytes memory str = new bytes(66);
-        str[0] = "0";
-        str[1] = "x";
-        for (uint256 i = 0; i < 32; i++) {
-            uint8 b = uint8(value[i]);
-            str[2 + (i * 2)] = bytes1(alphabet[b >> 4]);
-            str[3 + (i * 2)] = bytes1(alphabet[b & 0x0f]);
-        }
-        return string(str);
+    function _nodeForLabel(string memory label) internal view returns (bytes32) {
+        return keccak256(abi.encodePacked(parentNode, keccak256(bytes(label))));
     }
 
-    function _toHexAddress(address account) internal pure returns (string memory) {
-        bytes16 alphabet = 0x30313233343536373839616263646566;
-        bytes20 value = bytes20(account);
-        bytes memory str = new bytes(42);
-        str[0] = "0";
-        str[1] = "x";
+    function _fullName(string memory label) internal view returns (string memory) {
+        return string.concat(label, ".", parentName);
+    }
 
-        for (uint256 i = 0; i < 20; i++) {
-            uint8 b = uint8(value[i]);
-            str[2 + (i * 2)] = bytes1(alphabet[b >> 4]);
-            str[3 + (i * 2)] = bytes1(alphabet[b & 0x0f]);
+    function _validateLabel(string calldata label) internal pure {
+        bytes memory b = bytes(label);
+        uint256 length = b.length;
+        if (length < MIN_LABEL_LENGTH) revert LabelTooShort(length);
+        if (length > MAX_LABEL_LENGTH) revert LabelTooLong(length);
+
+        for (uint256 i = 0; i < length; ) {
+            bytes1 char = b[i];
+            bool isNumber = char >= 0x30 && char <= 0x39;
+            bool isLower = char >= 0x61 && char <= 0x7a;
+            if (!isNumber && !isLower) revert InvalidLabelCharacter(i, char);
+            unchecked {
+                ++i;
+            }
+        }
+    }
+
+    function _toLower(string memory value) internal pure returns (string memory) {
+        bytes memory b = bytes(value);
+        for (uint256 i = 0; i < b.length; i++) {
+            if (b[i] >= 0x41 && b[i] <= 0x5A) {
+                b[i] = bytes1(uint8(b[i]) + 32);
+            }
+        }
+        return string(b);
+    }
+
+    function _namehash(string memory name) internal pure returns (bytes32) {
+        bytes memory b = bytes(name);
+        bytes32 node;
+        uint256 end = b.length;
+
+        while (end > 0) {
+            uint256 start = end;
+            while (start > 0 && b[start - 1] != ".") {
+                start--;
+            }
+
+            bytes memory label = new bytes(end - start);
+            for (uint256 i = 0; i < label.length; i++) {
+                label[i] = b[start + i];
+            }
+
+            node = keccak256(abi.encodePacked(node, keccak256(label)));
+            if (start == 0) break;
+            end = start - 1;
         }
 
-        return string(str);
+        return node;
+    }
+
+    function _shortHex(bytes32 value) internal pure returns (string memory) {
+        string memory full = Strings.toHexString(uint256(value), 32);
+        bytes memory b = bytes(full);
+        bytes memory out = new bytes(15);
+        out[0] = b[0];
+        out[1] = b[1];
+        for (uint256 i = 0; i < 6; i++) {
+            out[i + 2] = b[i + 2];
+            out[i + 9] = b[b.length - 6 + i];
+        }
+        out[8] = ".";
+        return string(out);
     }
 }

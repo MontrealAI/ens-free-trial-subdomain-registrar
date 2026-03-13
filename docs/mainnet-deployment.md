@@ -1,53 +1,48 @@
-# Ethereum Mainnet Deployment Status
+# Mainnet Deployment Runbook (Identity-Only)
 
-## Live now (legacy/current release)
+This repo deploys only `FreeTrialSubdomainRegistrarIdentity`.
 
-- Release: `v1.0.0`
-- Contract: `FreeTrialSubdomainRegistrar`
-- Address: `0x7aAE649184182A01Ac7D8D5d7873903015C08761`
-- Verified: https://etherscan.io/address/0x7aAE649184182A01Ac7D8D5d7873903015C08761#code
-- Deployment tx: https://etherscan.io/tx/0x70a17265c9f3bc142b5b1c660f32439084672bf60e21a5d20e1dd233f4f39e0a
-- Parent activation tx: https://etherscan.io/tx/0xddaa35a801612edd7dba3086e1740fb0c945d1eb1cc0c06f6b2ab78e713f6205
+## Constants
+- Wrapper: `0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401`
+- Registry: `0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e`
+- Parent: `alpha.agent.agi.eth`
+- Parent node: `0xc74b6c5e8a0d97ed1fe28755da7d06a84593b4de92f6582327bc40f41d6c2d5e`
 
-## Next release target (deployment pending)
-
-- Contract: `FreeTrialSubdomainRegistrarIdentity`
-- Source: `contracts/FreeTrialSubdomainRegistrarIdentity.sol`
-- Mainnet deployment: **not yet recorded in this repository**
-- Constructor shape: `(address wrapper)`
-
-Mainnet constants:
-- ENS Registry: `0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e`
-- ENS NameWrapper: `0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401`
-
-## Canonical commands
-
+## 0) Preflight
 ```bash
-# legacy registrar (default operator-safe mode while setup flow is registrar-native)
-npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
-npm run verify:mainnet -- --address 0xYourRegistrarAddress
-
-# identity (explicit)
-npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --contract identity
-npm run verify:mainnet -- --address 0xYourIdentityAddress --contract identity
-
-# identity lifecycle operations
-npm run claim:mainnet -- --identity 0xYourIdentityAddress --node 0xNamehash --confirm-mainnet I_UNDERSTAND_MAINNET
-npm run sync:mainnet -- --identity 0xYourIdentityAddress --token-id 123 --confirm-mainnet I_UNDERSTAND_MAINNET
+npm run doctor:mainnet -- --parent-name alpha.agent.agi.eth --label 12345678
 ```
 
-## Operator safety notes
+## 1) Deploy + auto-verify
+```bash
+npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --verify
+```
+Deployment artifact is written to:
+- `release-assets/mainnet-free-trial-subdomain-registrar-identity.json`
 
-- All state-changing scripts remain mainnet gated.
-- Registration remains free.
-- Label rules remain single-label lowercase alphanumeric, 8–63 chars.
-- No mainnet deployment claim is made for identity contract until real deployment metadata exists.
+## 2) Retry verify (if needed)
+```bash
+npm run verify:mainnet -- --address 0xYourRegistrarAddress
+```
 
-## Pending identity deployment checklist
+## 3) Approve + activate root
+```bash
+npm run setup:parent:mainnet -- \
+  --registrar 0xYourRegistrarAddress \
+  --confirm-mainnet I_UNDERSTAND_MAINNET \
+  --action activate \
+  --approve
+```
 
-Before declaring identity as live, record all of:
-- deployed address, deployment transaction hash, and block number
-- verified explorer URL
-- constructor args (`wrapper`)
-- release-asset manifest update
-- README + release notes update
+## 4) Register first name
+```bash
+npm run register:mainnet -- \
+  --registrar 0xYourRegistrarAddress \
+  --label 12345678 \
+  --confirm-mainnet I_UNDERSTAND_MAINNET
+```
+
+## Manual ENS steps
+- Ensure `alpha.agent.agi.eth` is wrapped.
+- Ensure parent has `CANNOT_UNWRAP` burned.
+- If setup script cannot auto-approve, manually approve registrar operator in ENS Manager / NameWrapper.
