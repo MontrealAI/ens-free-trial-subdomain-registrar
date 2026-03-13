@@ -95,6 +95,25 @@ describe("FreeTrialSubdomainRegistrarIdentity", function () {
     await expect(identity.ownerOf(tokenId)).to.be.reverted;
   });
 
+
+  it("tokenURI owner field uses standard 20-byte hex address format", async function () {
+    const { identity, parentNode, user } = await fixture();
+    await identity.registerIdentity(parentNode, "trialpass8", user.address);
+
+    const node = ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))]));
+    const tokenId = BigInt(node);
+
+    const uri = await identity.tokenURI(tokenId);
+    const encodedJson = uri.replace("data:application/json;base64,", "");
+    const decodedJson = Buffer.from(encodedJson, "base64").toString("utf8");
+    const metadata = JSON.parse(decodedJson);
+
+    const encodedSvg = String(metadata.image).replace("data:image/svg+xml;base64,", "");
+    const decodedSvg = Buffer.from(encodedSvg, "base64").toString("utf8");
+
+    expect(decodedSvg).to.include(user.address.toLowerCase());
+  });
+
   it("tokenURI is fully onchain json", async function () {
     const { identity, parentNode, user } = await fixture();
     await identity.registerIdentity(parentNode, "trialpass8", user.address);

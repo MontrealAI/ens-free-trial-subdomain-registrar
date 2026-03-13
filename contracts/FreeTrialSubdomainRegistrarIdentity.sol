@@ -320,6 +320,18 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, ReentrancyGuard, IERC519
     }
 
     function _toHexAddress(address account) internal pure returns (string memory) {
-        return _toHexString(bytes32(uint256(uint160(account))));
+        bytes16 alphabet = 0x30313233343536373839616263646566;
+        bytes20 value = bytes20(account);
+        bytes memory str = new bytes(42);
+        str[0] = "0";
+        str[1] = "x";
+
+        for (uint256 i = 0; i < 20; i++) {
+            uint8 b = uint8(value[i]);
+            str[2 + (i * 2)] = bytes1(alphabet[b >> 4]);
+            str[3 + (i * 2)] = bytes1(alphabet[b & 0x0f]);
+        }
+
+        return string(str);
     }
 }
