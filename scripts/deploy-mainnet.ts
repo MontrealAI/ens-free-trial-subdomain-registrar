@@ -7,26 +7,37 @@ import {
 
 const MAINNET_CHAIN_ID = 1;
 const DEFAULT_WRAPPER = "0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401";
-const BUILD_PROFILE = "production-solc-0.8.17-optimizer-200";
+const DEFAULT_REGISTRY = "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e";
+const BUILD_PROFILE = "production-solc-0.8.24-optimizer-200";
 
-function requireAddress(name: string, value: string, ethersLib: { isAddress: (value: string) => boolean; isHexString?: (value: string) => boolean }): string {
+type ContractKind = "identity" | "legacy";
+
+function requireAddress(name: string, value: string, ethersLib: { isAddress: (value: string) => boolean }): string {
   if (!ethersLib.isAddress(value)) {
     throw new Error(`${name} must be a valid address. Received: ${value}`);
   }
   return value;
 }
 
+function resolveContractKind(): ContractKind {
+  const flagIndex = process.argv.findIndex((arg) => arg === "--contract");
+  if (flagIndex === -1) return "legacy";
+  const value = process.argv[flagIndex + 1];
+  if (value === "legacy" || value === "identity") return value;
+  throw new Error("--contract must be either 'identity' or 'legacy'.");
+}
+
 function printUsage(): void {
   console.log(`Usage:
-  npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
+  npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET [--contract identity|legacy]
 
 Optional:
   ENS_NAME_WRAPPER=0x... (defaults to mainnet NameWrapper)
+  ENS_REGISTRY=0x... (used by identity contract; defaults to ENS registry)
   MAINNET_CONFIRM=I_UNDERSTAND_MAINNET (env alternative to --confirm-mainnet)
 
-This script is mainnet-only and writes a deployment manifest under deployments/mainnet/.`);
+Default contract mode is legacy (operator-safe while setup flow targets legacy registrar).`);
 }
-
 
 async function main() {
   if (process.argv.includes("--help")) {
@@ -35,8 +46,10 @@ async function main() {
   }
 
   requireMainnetBroadcastConfirmation(process.argv, "broadcast a registrar deployment transaction");
+  const kind = resolveContractKind();
 
   const wrapper = requireAddress("ENS_NAME_WRAPPER", process.env.ENS_NAME_WRAPPER || DEFAULT_WRAPPER, ethers);
+  const registry = requireAddress("ENS_REGISTRY", process.env.ENS_REGISTRY || DEFAULT_REGISTRY, ethers);
   const provider = ethers.provider;
   const chainId = (await provider.getNetwork()).chainId;
 
@@ -55,32 +68,35 @@ async function main() {
     throw new Error(`ENS_NAME_WRAPPER=${wrapper} has no contract bytecode on mainnet. Refusing to deploy.`);
   }
 
+  const contractName = kind === "identity" ? "FreeTrialSubdomainRegistrarIdentity" : "FreeTrialSubdomainRegistrar";
+  const constructorArgs = kind === "identity" ? [wrapper, registry] : [wrapper];
+
   console.log(`Network: ${network.name}`);
   console.log(`Chain ID: ${chainId.toString()}`);
   console.log(`Deployer: ${deployer.address}`);
   console.log(`Deployer ETH balance: ${ethers.formatEther(deployerBalance)} ETH`);
-  console.log(`Contract: FreeTrialSubdomainRegistrar`);
-  console.log(`Constructor args: [\"${wrapper}\"]`);
+  console.log(`Contract: ${contractName}`);
+  console.log(`Constructor args: ${JSON.stringify(constructorArgs)}`);
   console.log(`Using ENS NameWrapper: ${wrapper}`);
 
-  const registrar = await ethers.deployContract("FreeTrialSubdomainRegistrar", [wrapper]);
-  console.log(`Deployment transaction: ${registrar.deploymentTransaction()?.hash ?? "unknown"}`);
+  const deployed = await ethers.deployContract(contractName, constructorArgs);
+  console.log(`Deployment transaction: ${deployed.deploymentTransaction()?.hash ?? "unknown"}`);
   console.log("Waiting for deployment confirmation...");
-  await registrar.waitForDeployment();
+  await deployed.waitForDeployment();
 
-  const address = await registrar.getAddress();
-  const receipt = await registrar.deploymentTransaction()?.wait();
+  const address = await deployed.getAddress();
+  const receipt = await deployed.deploymentTransaction()?.wait();
+  const verifyCommand = `npm run verify:mainnet -- --address ${address} --contract ${kind}`;
 
-  const verifyCommand = `npm run verify:mainnet -- --address ${address}`;
   const manifestPath = await writeDeploymentManifest({
     network: network.name,
     chainId: chainId.toString(),
     deployer: deployer.address,
-    contractName: "FreeTrialSubdomainRegistrar",
+    contractName,
     contractAddress: address,
-    deploymentTxHash: receipt?.hash || registrar.deploymentTransaction()?.hash || "unknown",
+    deploymentTxHash: receipt?.hash || deployed.deploymentTransaction()?.hash || "unknown",
     blockNumber: receipt?.blockNumber ?? null,
-    constructorArgs: [wrapper],
+    constructorArgs,
     timestamp: new Date().toISOString(),
     buildProfile: BUILD_PROFILE,
     verification: {
@@ -90,13 +106,13 @@ async function main() {
   });
 
   console.log("\nDeployment complete.");
-  console.log(`Registrar address: ${address}`);
+  console.log(`Contract address: ${address}`);
   console.log(`Manifest written: ${manifestPath}`);
   console.log("\nNext steps:");
-  console.log(`1) Add REGISTRAR_ADDRESS=${address} to your .env`);
-  console.log(`2) Verify contract (reads constructor args from manifest): ${verifyCommand}`);
-  console.log("3) Lock your parent in ENS Manager (burn CANNOT_UNWRAP on parent)");
-  console.log("4) Run: npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET");
+  console.log(`1) Verify contract: ${verifyCommand}`);
+  if (kind === "legacy") {
+    console.log("2) Setup parent: npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET");
+  }
 }
 
 main().catch((error) => {
