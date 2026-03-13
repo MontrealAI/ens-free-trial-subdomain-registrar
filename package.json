@@ -2,7 +2,7 @@
   "name": "ens-free-trial-subdomain-registrar",
   "version": "1.0.0",
   "private": true,
-  "description": "Free 30-day ENS subname registrar with no child grace period and no owner renewals.",
+  "description": "ENS-based free-trial subname registrar and universal identity primitive (wrapped subname + soulbound ENS identity NFT).",
   "engines": {
     "node": "20.19.6",
     "npm": ">=10"
