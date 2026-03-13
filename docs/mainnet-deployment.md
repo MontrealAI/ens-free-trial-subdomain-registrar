@@ -30,6 +30,10 @@ npm run verify:mainnet -- --address 0xYourRegistrarAddress
 # identity (explicit)
 npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --contract identity
 npm run verify:mainnet -- --address 0xYourIdentityAddress --contract identity
+
+# identity lifecycle operations
+npm run claim:mainnet -- --identity 0xYourIdentityAddress --node 0xNamehash --confirm-mainnet I_UNDERSTAND_MAINNET
+npm run sync:mainnet -- --identity 0xYourIdentityAddress --token-id 123 --confirm-mainnet I_UNDERSTAND_MAINNET
 ```
 
 ## Operator safety notes

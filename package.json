@@ -20,7 +20,9 @@
     "setup:parent:mainnet": "hardhat run scripts/approve-and-setup-parent.ts --network mainnet",
     "test": "hardhat test",
     "typecheck": "tsc --noEmit",
-    "verify:mainnet": "hardhat run scripts/verify-mainnet.ts --network mainnet"
+    "verify:mainnet": "hardhat run scripts/verify-mainnet.ts --network mainnet",
+    "claim:mainnet": "hardhat run scripts/claim-identity.ts --network mainnet",
+    "sync:mainnet": "hardhat run scripts/sync-identity.ts --network mainnet"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",

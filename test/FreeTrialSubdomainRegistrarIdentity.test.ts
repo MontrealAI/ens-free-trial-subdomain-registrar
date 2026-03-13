@@ -124,4 +124,28 @@ describe("FreeTrialSubdomainRegistrarIdentity", function () {
     const uri = await identity.tokenURI(tokenId);
     expect(uri.startsWith("data:application/json;base64,")).to.equal(true);
   });
+
+  it("rejects dotted labels and full-name style label inputs", async function () {
+    const { identity, parentNode, user } = await fixture();
+
+    await expect(identity.registerIdentity(parentNode, "bad.label", user.address)).to.be.revertedWithCustomError(identity, "DottedLabelNotAllowed");
+    await expect(identity.registerIdentity(parentNode, "Aliceagent", user.address)).to.be.revertedWithCustomError(identity, "InvalidLabelCharacter");
+  });
+
+  it("syncIdentity burns after wrapped expiry", async function () {
+    const { identity, wrapper, parentNode, user } = await fixture();
+    await identity.registerIdentity(parentNode, "trialpass8", user.address);
+
+    const node = ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))]));
+    const tokenId = BigInt(node);
+
+    const [owner, fuses] = await wrapper.getData(tokenId);
+    const latest = await ethers.provider.getBlock("latest");
+    const now = BigInt(latest!.timestamp);
+    await wrapper.setNameData(node, owner, fuses, Number(now - 1n), true);
+
+    await identity.syncIdentity(tokenId);
+    await expect(identity.ownerOf(tokenId)).to.be.reverted;
+  });
+
 });
