@@ -13,7 +13,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - Added draft next-major release notes at `docs/releases/v2.0.0-draft.md`.
 
 ### Changed
-- Updated deployment and verification scripts to support both `identity` (default) and `legacy` modes.
+- Updated deployment and verification scripts to support both `identity` and `legacy` modes, with `legacy` as the default when `--contract` is omitted.
 - Updated compiler/tooling baseline to Solidity `0.8.24` with optimizer runs 200.
 - Updated README and deployment docs to clearly separate live v1.0.0 legacy deployment from pending identity deployment.
 
