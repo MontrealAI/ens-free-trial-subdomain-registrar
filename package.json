@@ -30,7 +30,7 @@
     "dotenv": "^16.4.7",
     "hardhat": "^2.22.17",
     "typescript": "^5.7.2",
-    "solc": "0.8.17"
+    "solc": "0.8.24"
   },
   "packageManager": "npm@11.4.2"
 }
