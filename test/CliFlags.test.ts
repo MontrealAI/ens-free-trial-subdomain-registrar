@@ -15,7 +15,7 @@ describe("cli flag parsing", function () {
   });
 
   it("throws when a flag is passed without a value", function () {
-    const argv = ["node", "script", "--label", "--parent-name", "example.eth"];
+    const argv = ["node", "script", "--label", "--confirm-mainnet", "I_UNDERSTAND_MAINNET"];
     expect(() => readFlagValue(argv, "label")).to.throw("Flag --label requires a value.");
   });
 });

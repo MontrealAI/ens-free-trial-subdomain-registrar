@@ -1,12 +1,12 @@
 import { expect } from "chai";
+import fs from "node:fs/promises";
+import path from "node:path";
 
 import {
+  RELEASE_ARTIFACT_PATH,
   requireMainnetBroadcastConfirmation,
-  getManifestPath,
-  readDeploymentManifest,
-  updateDeploymentManifest,
-  writeDeploymentManifest,
-  type DeploymentManifest
+  readReleaseArtifact,
+  writeReleaseArtifact
 } from "../scripts/utils/mainnet-safety";
 
 describe("mainnet safety helpers", function () {
@@ -47,46 +47,34 @@ describe("mainnet safety helpers", function () {
     else process.env.MAINNET_CONFIRM = original;
   });
 
-  it("writes deployment manifest to deployments/<network>", async function () {
-    const manifest: DeploymentManifest = {
-      network: "hardhatMainnet",
-      chainId: "1",
+  it("writes and reads release artifact", async function () {
+    const originalPath = path.join(process.cwd(), RELEASE_ARTIFACT_PATH);
+    const originalContent = await fs.readFile(originalPath, "utf8").catch(() => undefined);
+
+    await writeReleaseArtifact({
+      chainId: 1,
+      network: "mainnet",
+      contractName: "FreeTrialSubdomainRegistrarIdentity",
+      contractPath: "contracts/FreeTrialSubdomainRegistrarIdentity.sol:FreeTrialSubdomainRegistrarIdentity",
+      address: "0x00000000000000000000000000000000000000AA",
+      deployTxHash: "0xhash",
       deployer: "0x0000000000000000000000000000000000000001",
-      contractName: "FreeTrialSubdomainRegistrar",
-      contractAddress: "0x00000000000000000000000000000000000000AA",
-      deploymentTxHash: "0xhash",
-      blockNumber: 123,
-      constructorArgs: ["0x0000000000000000000000000000000000000002"],
-      timestamp: new Date().toISOString(),
-      buildProfile: "production-solc-0.8.17-optimizer-200",
-      verification: {
-        command: "npm run verify:mainnet -- ...",
-        status: "pending"
-      }
-    };
+      constructorArgs: ["0x0000000000000000000000000000000000000002", "0x0000000000000000000000000000000000000003"],
+      wrapper: "0x0000000000000000000000000000000000000002",
+      ensRegistry: "0x0000000000000000000000000000000000000003",
+      rootName: "alpha.agent.agi.eth",
+      rootNode: "0xc74b6c5e8a0d97ed1fe28755da7d06a84593b4de92f6582327bc40f41d6c2d5e",
+      compilerVersion: "0.8.24",
+      optimizer: { enabled: true, runs: 200 },
+      viaIR: false,
+      deployedAt: new Date().toISOString()
+    });
 
-    const outputPath = await writeDeploymentManifest(manifest);
-    expect(outputPath).to.include("deployments/hardhatMainnet");
+    const read = await readReleaseArtifact();
+    expect(read.contractName).to.eq("FreeTrialSubdomainRegistrarIdentity");
+    expect(read.constructorArgs).to.have.length(2);
 
-    const readBack = await readDeploymentManifest(outputPath);
-    expect(readBack.buildProfile).to.equal("production-solc-0.8.17-optimizer-200");
-
-    await updateDeploymentManifest(outputPath, (current) => ({
-      ...current,
-      verification: {
-        ...current.verification,
-        status: "verified",
-        notes: "test update"
-      }
-    }));
-
-    const updated = await readDeploymentManifest(outputPath);
-    expect(updated.verification.status).to.equal("verified");
-    expect(updated.verification.notes).to.equal("test update");
-  });
-
-  it("builds deterministic manifest path", function () {
-    const path = getManifestPath("mainnet", "0x00000000000000000000000000000000000000AA");
-    expect(path).to.include("deployments/mainnet/FreeTrialSubdomainRegistrar-0x00000000000000000000000000000000000000aa.json");
+    if (originalContent === undefined) await fs.unlink(originalPath).catch(() => undefined);
+    else await fs.writeFile(originalPath, originalContent, "utf8");
   });
 });

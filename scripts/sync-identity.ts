@@ -1,83 +1,48 @@
-import { ethers, network } from "hardhat";
+import { ethers } from "hardhat";
 
 import { hasFlag, readFlagValue } from "./utils/cli-flags";
-import { requireMainnetBroadcastConfirmation } from "./utils/mainnet-safety";
+import { readReleaseArtifact, requireMainnetBroadcastConfirmation } from "./utils/mainnet-safety";
 
-const MAINNET_CHAIN_ID = 1n;
+const CHAIN_ID = 1n;
 
-function printUsage(): void {
-  console.log(`Usage:
-  npm run sync:mainnet -- --identity 0x... --token-id 123... --confirm-mainnet I_UNDERSTAND_MAINNET
-
-Notes:
-- syncIdentity is permissionless and may burn stale identities.`);
-}
-
-function requireAddress(name: string, value: string | undefined): string {
-  if (!value || !ethers.isAddress(value)) {
-    throw new Error(`${name} must be set to a valid address.`);
-  }
-  return value;
-}
-
-function requireTokenId(value: string | undefined): bigint {
-  if (!value) {
-    throw new Error("--token-id is required.");
-  }
-
-  try {
-    const parsed = BigInt(value);
-    if (parsed < 0n) throw new Error("token id must be non-negative");
-    return parsed;
-  } catch {
-    throw new Error("--token-id must be a valid uint256 integer.");
-  }
+function usage() {
+  console.log(
+    "Usage: npm run sync:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET [--registrar 0x...] (--token-id <id> | --label 12345678)"
+  );
 }
 
 async function main() {
-  if (hasFlag(process.argv, "help")) {
-    printUsage();
-    return;
+  if (hasFlag(process.argv, "help")) return usage();
+  requireMainnetBroadcastConfirmation(process.argv, "sync identity on Ethereum mainnet");
+  if ((await ethers.provider.getNetwork()).chainId !== CHAIN_ID) throw new Error("Mainnet only.");
+
+  const artifact = await readReleaseArtifact().catch(() => undefined);
+  const registrarAddress = readFlagValue(process.argv, "registrar") || process.env.REGISTRAR_ADDRESS || artifact?.address;
+  const tokenIdRaw = readFlagValue(process.argv, "token-id");
+  const label = readFlagValue(process.argv, "label");
+
+  if (!registrarAddress || !ethers.isAddress(registrarAddress)) {
+    throw new Error("Missing --registrar and no deployment artifact found.");
   }
-
-  requireMainnetBroadcastConfirmation(process.argv, "broadcast an identity sync transaction");
-
-  const chainId = (await ethers.provider.getNetwork()).chainId;
-  if (chainId !== MAINNET_CHAIN_ID) {
-    throw new Error(`This script is mainnet-only. Connected chainId=${chainId.toString()}.`);
-  }
-
-  const identityAddress = requireAddress("IDENTITY_ADDRESS", readFlagValue(process.argv, "identity") || process.env.IDENTITY_ADDRESS);
-  const tokenId = requireTokenId(readFlagValue(process.argv, "token-id") || process.env.TOKEN_ID);
-
-  const code = await ethers.provider.getCode(identityAddress);
-  if (code === "0x") {
-    throw new Error(`No contract code found at IDENTITY_ADDRESS=${identityAddress}.`);
-  }
+  if (!tokenIdRaw && !label) throw new Error("Provide either --token-id or --label.");
+  if (tokenIdRaw && label) throw new Error("Use only one of --token-id or --label.");
 
   const [signer] = await ethers.getSigners();
-  const signerAddress = await signer.getAddress();
-  const signerBalance = await ethers.provider.getBalance(signerAddress);
-  if (signerBalance === 0n) {
-    throw new Error("Signer has zero ETH balance. Fund the account for gas before syncing identity.");
+  const registrar = await ethers.getContractAt("FreeTrialSubdomainRegistrarIdentity", registrarAddress, signer);
+
+  let tx;
+  if (label) {
+    tx = await registrar.syncIdentityByLabel(label);
+  } else {
+    const tokenId = BigInt(tokenIdRaw!);
+    tx = await registrar.syncIdentity(tokenId);
   }
 
-  const identity = await ethers.getContractAt("FreeTrialSubdomainRegistrarIdentity", identityAddress, signer);
-
-  console.log(`Network: ${network.name}`);
-  console.log(`Chain ID: ${chainId.toString()}`);
-  console.log(`Identity contract: ${identityAddress}`);
-  console.log(`Caller: ${signerAddress}`);
-  console.log(`Token ID: ${tokenId.toString()}`);
-
-  const tx = await identity.syncIdentity(tokenId);
   const receipt = await tx.wait();
-
-  console.log("Done.");
-  console.log(`Transaction hash: ${receipt?.hash ?? tx.hash}`);
+  console.log(`txHash: ${receipt?.hash ?? tx.hash}`);
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
 });
