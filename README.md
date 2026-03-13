@@ -1,299 +1,99 @@
 # ENS Free Trial Subdomain Registrar
 
-Production-focused ENS subname registrar for **free, non-renewable 30-day wrapped trials**.
+[![CI status](https://github.com/MontrealAI/ens-free-trial-subdomain-registrar/actions/workflows/ci.yml/badge.svg)](https://github.com/MontrealAI/ens-free-trial-subdomain-registrar/actions/workflows/ci.yml)
+[![Latest GitHub release](https://img.shields.io/github/v/release/MontrealAI/ens-free-trial-subdomain-registrar?display_name=tag)](https://github.com/MontrealAI/ens-free-trial-subdomain-registrar/releases)
+[![License: MIT](https://img.shields.io/github/license/MontrealAI/ens-free-trial-subdomain-registrar)](./LICENSE)
+[![Node.js 20.19.6](https://img.shields.io/badge/node-20.19.6-339933)](./.nvmrc)
+[![Mainnet contract verified on Etherscan](https://img.shields.io/badge/mainnet-verified%20contract-3C3C3D)](https://etherscan.io/address/0x7aAE649184182A01Ac7D8D5d7873903015C08761#code)
 
-## 1) What this does
+Production-focused ENS registrar for **free, non-renewable 30-day wrapped subname trials**.
 
-This registrar allows anyone to register a wrapped subname under approved parent names for free.
+## Live on Ethereum Mainnet
 
-The child expiry is always:
+- **Contract:** `FreeTrialSubdomainRegistrar`
+- **Address:** `0x7aAE649184182A01Ac7D8D5d7873903015C08761`
+- **Etherscan (verified):** <https://etherscan.io/address/0x7aAE649184182A01Ac7D8D5d7873903015C08761#code>
+- **Mainnet deployment guide:** [`docs/mainnet-deployment.md`](docs/mainnet-deployment.md)
+- **Flagship operator walkthrough (`alpha.agent.agi.eth`):** [`docs/use-cases/alpha-agent-agi-eth.md`](docs/use-cases/alpha-agent-agi-eth.md)
+- **Latest releases:** <https://github.com/MontrealAI/ens-free-trial-subdomain-registrar/releases>
+
+## Core behavior
+
+This registrar allows anyone to register wrapped first-degree subnames under approved parents for free.
+
+Child expiry is always:
 
 - `min(block.timestamp + 30 days, parent effective expiry)`
 
-Where **parent effective expiry** means:
+Where parent effective expiry is:
 
-- For non-`.eth` parents: the wrapped parent expiry from `NameWrapper.getData`.
-- For `.eth` parents (`IS_DOT_ETH` fuse set): `parentExpiry - 90 days`.
+- non-`.eth` parent: parent wrapped expiry from `NameWrapper.getData`
+- `.eth` parent (`IS_DOT_ETH`): `parentExpiry - 90 days`
 
-This ensures:
+This guarantees:
 
-- child trial is never longer than 30 days,
-- child never receives its own grace period,
-- `.eth` grace only affects parent-cap calculations.
+- children never exceed 30 days,
+- children get no independent grace period,
+- `.eth` grace only affects parent-cap math,
+- child owner is never granted `CAN_EXTEND_EXPIRY`.
 
-> ⚠️ Mainnet safety: this repository intentionally treats every state-changing script as **mainnet-only** and fails if connected to the wrong chain id.
+## Input semantics (operator safety)
 
-## 2) Security model and invariants
+- Label input is **single-label only** (first-degree child semantics).
+- Dotted labels are rejected.
+- Full ENS names passed as `--label` are rejected.
+- Labels must match `[a-z0-9]{8,63}`.
 
-- Parent must be wrapped and locked (`CANNOT_UNWRAP` burned on the parent).
-- Registrar must be approved as NameWrapper operator for the wrapped parent owner.
-- Registrar enforces child fuses:
-  - always `CANNOT_UNWRAP`
-  - always `PARENT_CANNOT_CONTROL`
-  - plus optional **owner-controlled** fuses from caller
-- Registrar does **not** grant `CAN_EXTEND_EXPIRY`.
-- Child owner cannot self-renew / self-extend through this system.
-- Registration is free (`register` reverts if any ETH is sent; contract also rejects direct ETH transfers).
-- Label validation is onchain and strict: lowercase alphanumeric only, length 8–63.
+Examples:
 
-## 3) Repository layout
+- ✅ `--parent-name alpha.agent.agi.eth --label 12345678` → `12345678.alpha.agent.agi.eth`
+- ✅ `--parent-name alpha.agent.agi.eth --label ethereum` → `ethereum.alpha.agent.agi.eth`
+- ❌ `--label ethereum.alpha.agent.agi.eth`
 
-- `contracts/FreeTrialSubdomainRegistrar.sol` — registrar contract
-- `scripts/deploy-mainnet.ts` — mainnet deploy
-- `scripts/approve-and-setup-parent.ts` — approve + activate/deactivate/remove parent
-- `scripts/register-subname.ts` — operator registration utility
-- `test/FreeTrialSubdomainRegistrar.test.ts` — contract tests with mocks
-- `.github/workflows/ci.yml` — CI for build/test/typecheck
+## Quickstart
 
-## 4) Prerequisites
+### Prerequisites
 
-- Node.js **20.19.6** (pinned and validated for this repo)
-- npm (bundled with Node 20.19.6)
-- Ethereum mainnet RPC URL
-- Deployer/operator wallet with ETH for gas
-- Parent ENS name already wrapped in NameWrapper
-- Version manager support files are included: `.nvmrc` and `.node-version` are both pinned to `20.19.6`.
-- Solidity compilation is pinned to a local `solc@0.8.17` build for deterministic compile behavior on Node 20.19.6.
+- Node.js **20.19.6**
+- npm
+- mainnet RPC URL
+- signer wallet with ETH for gas
 
-## 5) Install and local validation
+### Install and validate
 
 ```bash
 npm ci
-cp .env.example .env
-npm run build:production
+npm run build
 npm test
 npm run typecheck
 ```
 
-## Flagship operator example: `alpha.agent.agi.eth`
-
-For a production-style, non-technical-operator walkthrough with copy/paste commands, see:
-
-- [`docs/use-cases/alpha-agent-agi-eth.md`](docs/use-cases/alpha-agent-agi-eth.md)
-- [`docs/etherscan-web-guide.md`](docs/etherscan-web-guide.md)
-
-That guide explicitly demonstrates first-degree free-trial subnames:
-
-- `12345678.alpha.agent.agi.eth`
-- `ethereum.alpha.agent.agi.eth`
-
-and explains why `--label` must be one label only (no dots, no full name input).
-
-## 6) Environment configuration
-
-Copy `.env.example` and set:
+### Mainnet operations
 
 ```bash
-MAINNET_RPC_URL=...
-DEPLOYER_PRIVATE_KEY=0x...
-ETHERSCAN_API_KEY=...
-
-# set after deployment
-REGISTRAR_ADDRESS=0x...
-
-# choose one
-PARENT_NAME=example.eth
-# PARENT_NODE=0x...
-```
-
-Optional:
-
-```bash
-ENS_NAME_WRAPPER=0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401
-LABEL=trialpass8
-NEW_OWNER=0xRecipientAddress
-RESOLVER=0x0000000000000000000000000000000000000000
-OWNER_CONTROLLED_FUSES=0
-RECORDS_JSON=[]
-PARENT_ACTION=activate
-```
-
-## 7) Mainnet runbook
-
-### Step 0 — Optional read-only doctor preflight
-
-```bash
-npm run doctor:mainnet -- --help
-```
-
-Recommended full preflight (no transactions sent):
-
-```bash
-npm run doctor:mainnet -- --registrar 0xYourRegistrar --parent-name example.eth --label trialpass8
-```
-
-### Step A — Deploy
-
-```bash
+# deploy
 npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
+
+# verify
+npm run verify:mainnet -- --address 0x7aAE649184182A01Ac7D8D5d7873903015C08761
+
+# activate parent
+npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate --parent-name alpha.agent.agi.eth
+
+# register a subname
+npm run register:mainnet -- --registrar 0x7aAE649184182A01Ac7D8D5d7873903015C08761 --parent-name alpha.agent.agi.eth --label 12345678 --owner 0xRecipientAddress --confirm-mainnet I_UNDERSTAND_MAINNET
 ```
 
-Script checks mainnet chain id, requires explicit mainnet confirmation, and writes a deployment manifest under `deployments/mainnet/`.
+## Documentation
 
-One-command alternative (deploy + verify):
+- Mainnet deployment metadata and verification commands: [`docs/mainnet-deployment.md`](docs/mainnet-deployment.md)
+- Flagship operational walkthrough: [`docs/use-cases/alpha-agent-agi-eth.md`](docs/use-cases/alpha-agent-agi-eth.md)
+- Explorer-first operational flow: [`docs/etherscan-web-guide.md`](docs/etherscan-web-guide.md)
+- Maintainer release process: [`docs/release-process.md`](docs/release-process.md)
+- Security policy: [`SECURITY.md`](SECURITY.md)
 
-```bash
-npm run deploy-and-verify:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
-```
+## Safety notes
 
-Any flags after `--` are forwarded to the deploy step (for example `--confirm-mainnet`).
-
-### Step B — Lock parent in ENS Manager
-
-Burn `CANNOT_UNWRAP` on the wrapped parent.
-
-### Step C — Approve and activate parent
-
-```bash
-npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
-```
-
-Script safety checks include:
-- strict `chainId == 1`
-- explicit `--confirm-mainnet I_UNDERSTAND_MAINNET` (or `MAINNET_CONFIRM`) gate before broadcast
-- ENS NameWrapper and registrar bytecode existence checks
-- non-zero signer ETH balance
-- parent lock validation before activation
-- registrar approval checks against NameWrapper
-
-Deactivate later with:
-
-```bash
-npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action deactivate --parent-name example.eth
-```
-
-Remove parent config entry (also blocks new mints):
-
-```bash
-npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action remove --parent-name example.eth
-```
-
-### Step D — Register subname
-
-```bash
-npm run register:mainnet -- \
-  --registrar 0xYourRegistrar \
-  --parent-name example.eth \
-  --label trialpass8 \
-  --owner 0xRecipient \
-  --confirm-mainnet I_UNDERSTAND_MAINNET
-```
-
-Important: `--label` is first-degree only.
-
-- ✅ `--parent-name alpha.agent.agi.eth --label 12345678` creates `12345678.alpha.agent.agi.eth`
-- ✅ `--parent-name alpha.agent.agi.eth --label ethereum` creates `ethereum.alpha.agent.agi.eth`
-- ❌ `--label ethereum.12345678` (dotted/nested label)
-- ❌ `--label 12345678.alpha.agent.agi.eth` (full name passed as label)
-
-Script safety checks include:
-- strict `chainId == 1`
-- non-zero signer ETH balance
-- `REGISTRAR_ADDRESS` and non-zero `RESOLVER` must contain deployed bytecode
-- records require a non-zero resolver
-- `PARENT_NODE` must be a 32-byte hex node if provided directly
-- if both `PARENT_NAME` and `PARENT_NODE` are provided, they must resolve to the same node (fails closed on mismatch)
-- onchain label validation preview before submitting tx
-- parent active check (`isParentActive`) before submitting tx
-- subname availability preflight (`available(node)`) before submitting tx
-
-Get CLI help:
-
-```bash
-npm run register:mainnet -- --help
-```
-
-Doctor CLI help:
-
-```bash
-npm run doctor:mainnet -- --help
-```
-
-### Mainnet confirmation gate (all state-changing scripts)
-
-To reduce accidental mainnet writes, deployment/setup/register scripts require an explicit confirmation phrase:
-
-- CLI flag: `--confirm-mainnet I_UNDERSTAND_MAINNET`
-- or env: `MAINNET_CONFIRM=I_UNDERSTAND_MAINNET`
-
-Scripts fail closed if this confirmation is missing.
-
-### Step E — Verify contract
-
-```bash
-npm run verify:mainnet -- --address 0xYourRegistrar
-```
-
-Verification script behavior:
-
-- mainnet-only chain ID check
-- reads constructor args from deployment manifest when available
-- supports explicit override: `--wrapper 0x...`
-- updates deployment manifest verification status (`pending` -> `verified`/`failed`)
-
-Explicit manifest form:
-
-```bash
-npm run verify:mainnet -- --address 0xYourRegistrar --manifest deployments/mainnet/FreeTrialSubdomainRegistrar-0xyourregistrar.json
-```
-
-## 8) Resolver records option
-
-`register` can forward resolver calls through `records`.
-
-Safety rules:
-
-- If records are provided, resolver must be a contract.
-- Each calldata payload must embed the child node at bytes `[4:36]`.
-- Mismatched payloads revert.
-
-## 9) Common failure modes
-
-- `ParentNotLocked`: burn `CANNOT_UNWRAP` on parent first.
-- `RegistrarNotAuthorised`: approve registrar as NameWrapper operator.
-- `ParentNameNotActive`: parent has not been activated in this registrar.
-- `ParentExpired`: parent effective expiry already passed.
-- `DottedLabelNotAllowed`: do not pass dotted/full ENS names in the label field; pass one label only.
-- `InvalidLabelCharacter` / `LabelTooShort`: label must match `[a-z0-9]{8,63}`.
-- `Unavailable`: subname already exists and is not expired.
-- Script error `This script is mainnet-only`: your RPC endpoint or network config is not chain id 1.
-- Script error `No contract code found at REGISTRAR_ADDRESS`: wrong contract address or wrong network.
-- Script error `Flag --<name> requires a value.`: a CLI flag was provided without its value (for example, `--label` with no label string).
-
-## 10) Mainnet deployment checklist
-
-- [ ] Node.js 20.19.6 in operator environment.
-- [ ] `npm ci`, `npm run build`, `npm test`, `npm run typecheck` all pass.
-- [ ] Wrapper address confirmed for target chain.
-- [ ] Parent wrapped and locked (`CANNOT_UNWRAP` burned).
-- [ ] Registrar deployed and verified.
-- [ ] Parent approved and activated.
-- [ ] Test registration performed and resolver behavior validated.
-- [ ] Monitoring and transaction alerting in place.
-
-## 11) Operator checklist
-
-- [ ] Use dedicated ops wallet / Safe flow.
-- [ ] Never expose private keys in shell history or logs.
-- [ ] Confirm chain id before every state-changing command.
-- [ ] Keep `.env` out of version control.
-- [ ] Document parent node/name and registrar address in runbooks.
-- [ ] Keep a rollback action ready (`--action deactivate` or `--action remove` for parent).
-
-## 12) Scope caveats
-
-- Tests use mocks, not a full mainnet fork of ENS contracts.
-- Perform at least one real test on a fork or test environment before production rollout.
-- If ENS NameWrapper semantics change in future upgrades, re-review fuse and expiry assumptions.
-- `records` forwarding is intentionally generic and only guards that calldata embeds the child node at bytes `[4:36]`; operators should only pass resolver calldata generated by trusted tooling.
-
-## 13) Security audit notes (operator-facing)
-
-Before production deployment, explicitly confirm:
-
-- `registrar.wrapper()` equals the expected ENS NameWrapper address for the target chain.
-- parent is wrapped, not expired (effective expiry), and locked.
-- parent owner has approved registrar in NameWrapper.
-- registration script preflight reports parent active and subname available.
-
-Mainnet scripts are intentionally strict and will fail closed when these checks do not pass.
+- State-changing scripts are intentionally mainnet-gated and require explicit confirmation.
+- `register` rejects accidental ETH; the contract also rejects direct ETH transfers.
+- Deactivating/removing a parent stops **new** mints only; existing issued subnames remain until expiry.
