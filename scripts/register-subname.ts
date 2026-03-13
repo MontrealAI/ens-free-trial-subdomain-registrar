@@ -1,6 +1,7 @@
 import { ethers } from "hardhat";
 
 import { hasFlag, readFlagValue } from "./utils/cli-flags";
+import { validateSingleLabelInput } from "./utils/label-input";
 import { readReleaseArtifact, requireMainnetBroadcastConfirmation } from "./utils/mainnet-safety";
 
 const CHAIN_ID = 1n;
@@ -21,6 +22,7 @@ async function main() {
 
   if (!registrarAddress || !ethers.isAddress(registrarAddress)) throw new Error("Missing --registrar and no deployment artifact found.");
   if (!label) throw new Error("Missing --label.");
+  validateSingleLabelInput(label);
 
   const [signer] = await ethers.getSigners();
   const registrar = await ethers.getContractAt("FreeTrialSubdomainRegistrarIdentity", registrarAddress, signer);
