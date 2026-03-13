@@ -1,12 +1,13 @@
 import { ethers } from "hardhat";
 
 import { hasFlag, readFlagValue } from "./utils/cli-flags";
+import { readReleaseArtifact } from "./utils/mainnet-safety";
 
 const CHAIN_ID = 1n;
 const WRAPPER = "0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401";
 const REGISTRY = "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e";
-const PARENT_NAME = "alpha.agent.agi.eth";
-const PARENT_NODE = "0xc74b6c5e8a0d97ed1fe28755da7d06a84593b4de92f6582327bc40f41d6c2d5e";
+const ROOT_NAME = "alpha.agent.agi.eth";
+const ROOT_NODE = "0xc74b6c5e8a0d97ed1fe28755da7d06a84593b4de92f6582327bc40f41d6c2d5e";
 const CANNOT_UNWRAP = 1n;
 
 const WRAPPER_ABI = [
@@ -16,54 +17,82 @@ const WRAPPER_ABI = [
 ];
 
 function usage() {
-  console.log("Usage: npm run doctor:mainnet -- --registrar 0x... --label 12345678 --parent-name alpha.agent.agi.eth");
+  console.log("Usage: npm run doctor:mainnet -- --registrar 0x... --label 12345678");
 }
 
 async function main() {
   if (hasFlag(process.argv, "help")) return usage();
   const provider = ethers.provider;
-  const network = await provider.getNetwork();
-  if (network.chainId !== CHAIN_ID) throw new Error(`Mainnet only, found chainId=${network.chainId}`);
+  const net = await provider.getNetwork();
+  if (net.chainId !== CHAIN_ID) throw new Error(`Mainnet only. chainId=${net.chainId}`);
 
   const [signer] = await ethers.getSigners();
-  const balance = await provider.getBalance(signer.address);
-  const registrarAddress = readFlagValue(process.argv, "registrar") || process.env.REGISTRAR_ADDRESS;
-  const label = readFlagValue(process.argv, "label") || "12345678";
-  const parentName = readFlagValue(process.argv, "parent-name") || PARENT_NAME;
+  const signerBal = await provider.getBalance(signer.address);
+  const wrapperCode = await provider.getCode(WRAPPER);
+  const registryCode = await provider.getCode(REGISTRY);
+  const artifact = await readReleaseArtifact().catch(() => undefined);
 
-  console.log(`chainId: ${network.chainId}`);
+  const registrarAddress = readFlagValue(process.argv, "registrar") || process.env.REGISTRAR_ADDRESS || artifact?.address;
+  const label = readFlagValue(process.argv, "label") || "12345678";
+
+  console.log(`# mainnet doctor`);
+  console.log(`chainId: ${net.chainId}`);
   console.log(`rpc: connected`);
-  console.log(`deployer: ${signer.address}`);
-  console.log(`deployerBalanceEth: ${ethers.formatEther(balance)}`);
-  console.log(`wrapper: ${WRAPPER}`);
-  console.log(`registry: ${REGISTRY}`);
-  console.log(`parentName: ${parentName}`);
-  console.log(`parentNode: ${PARENT_NODE}`);
-  console.log(`namehashMatches: ${ethers.namehash(parentName).toLowerCase() === PARENT_NODE.toLowerCase()}`);
+  console.log(`signer: ${signer.address}`);
+  console.log(`signerBalanceEth: ${ethers.formatEther(signerBal)}`);
+  console.log(`wrapperCodePresent: ${wrapperCode !== "0x"}`);
+  console.log(`ensRegistryCodePresent: ${registryCode !== "0x"}`);
+  console.log(`rootName: ${ROOT_NAME}`);
+  console.log(`rootNode: ${ROOT_NODE}`);
+  console.log(`rootNamehashMatches: ${ethers.namehash(ROOT_NAME).toLowerCase() === ROOT_NODE.toLowerCase()}`);
 
   const wrapper = await ethers.getContractAt(WRAPPER_ABI, WRAPPER);
-  const [parentOwner] = await wrapper.getData(PARENT_NODE);
-  const parentLocked = await wrapper.allFusesBurned(PARENT_NODE, CANNOT_UNWRAP);
-  console.log(`parentWrappedOwner: ${parentOwner}`);
-  console.log(`parentLocked: ${parentLocked}`);
+  const [parentOwner, parentFuses, parentExpiry] = await wrapper.getData(ROOT_NODE).catch(() => [ethers.ZeroAddress, 0, 0]);
+  const parentLocked = await wrapper.allFusesBurned(ROOT_NODE, CANNOT_UNWRAP).catch(() => false);
+  const effectiveExpiry = (BigInt(parentFuses) & (1n << 17n)) !== 0n ? Math.max(0, Number(parentExpiry) - 90 * 24 * 60 * 60) : Number(parentExpiry);
 
-  if (!registrarAddress) return console.log("registrar: not provided, skipping registrar checks");
+  console.log(`parentOwner: ${parentOwner}`);
+  console.log(`parentLocked: ${parentLocked}`);
+  console.log(`parentExpiry: ${parentExpiry}`);
+  console.log(`parentEffectiveExpiry: ${effectiveExpiry}`);
+
+  if (!registrarAddress) {
+    console.log(`mode: pre-deploy (no registrar address/artifact)`);
+    return;
+  }
+
+  const registrarCode = await provider.getCode(registrarAddress);
+  console.log(`registrar: ${registrarAddress}`);
+  console.log(`registrarCodePresent: ${registrarCode !== "0x"}`);
+  if (registrarCode === "0x") return;
 
   const registrar = await ethers.getContractAt("FreeTrialSubdomainRegistrarIdentity", registrarAddress);
-  console.log(`registrar: ${registrarAddress}`);
-  console.log(`registrarCanModifyParent: ${await wrapper.canModifyName(PARENT_NODE, registrarAddress)}`);
-  console.log(`paused: ${await registrar.paused()}`);
+  const authorised = await wrapper.canModifyName(ROOT_NODE, registrarAddress);
+
+  console.log(`contractOwner: ${await registrar.owner()}`);
+  console.log(`contractWrapper: ${await registrar.wrapper()}`);
+  console.log(`contractEnsRegistry: ${await registrar.ensRegistry()}`);
   console.log(`rootActive: ${await registrar.rootActive()}`);
-  console.log(`labelValid: ${await registrar.validateLabel(label)}`);
-  const preview = await registrar.preview(label);
-  console.log(`preview.fullName: ${preview[0]}`);
-  console.log(`preview.node: ${preview[1]}`);
-  console.log(`preview.expectedExpiry: ${preview[3]}`);
-  console.log(`preview.available: ${preview[4]}`);
+  console.log(`paused: ${await registrar.paused()}`);
+  console.log(`registrarAuthorised: ${authorised}`);
+
+  console.log(`sampleLabel: ${label}`);
+  console.log(`sampleLabelValid: ${await registrar.validateLabel(label)}`);
+  const p = await registrar.preview(label);
+  console.log(`preview.status: ${p.status}`);
+  console.log(`preview.fullName: ${p.fullName}`);
+  console.log(`preview.available: ${p.availableOut}`);
   console.log(`available: ${await registrar.available(label)}`);
+
+  const phase = !(await registrar.rootActive())
+    ? "post-deploy pre-activation"
+    : (await registrar.paused())
+      ? "post-activation paused"
+      : "post-activation ready";
+  console.log(`mode: ${phase}`);
 }
 
 main().catch((error) => {
-  console.error(error);
+  console.error(error instanceof Error ? error.message : error);
   process.exitCode = 1;
 });

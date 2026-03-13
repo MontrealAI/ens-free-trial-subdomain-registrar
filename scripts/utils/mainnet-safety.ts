@@ -1,5 +1,6 @@
 import fs from "node:fs/promises";
 import path from "node:path";
+import { execSync } from "node:child_process";
 
 import { readFlagValue } from "./cli-flags";
 
@@ -16,17 +17,22 @@ export function requireMainnetBroadcastConfirmation(argv: readonly string[], act
 
 export type DeploymentArtifact = {
   chainId: number;
+  network: string;
   contractName: "FreeTrialSubdomainRegistrarIdentity";
+  contractPath: "contracts/FreeTrialSubdomainRegistrarIdentity.sol:FreeTrialSubdomainRegistrarIdentity";
   address: string;
   deployTxHash: string;
-  constructorArgs: [string, string, string, string];
+  deployer: string;
+  constructorArgs: [string, string];
   wrapper: string;
   ensRegistry: string;
-  parentName: string;
-  parentNode: string;
+  rootName: "alpha.agent.agi.eth";
+  rootNode: string;
   compilerVersion: string;
   optimizer: { enabled: boolean; runs: number };
+  viaIR: boolean;
   deployedAt: string;
+  gitCommit?: string;
 };
 
 export async function writeReleaseArtifact(artifact: DeploymentArtifact): Promise<void> {
@@ -40,41 +46,10 @@ export async function readReleaseArtifact(): Promise<DeploymentArtifact> {
   return JSON.parse(raw) as DeploymentArtifact;
 }
 
-export type DeploymentManifest = {
-  network: string;
-  chainId: string;
-  deployer: string;
-  contractName: string;
-  contractAddress: string;
-  deploymentTxHash: string;
-  blockNumber: number | null;
-  constructorArgs: readonly string[];
-  timestamp: string;
-  buildProfile: string;
-  verification: { command: string; status: "pending" | "verified" | "failed"; notes?: string };
-};
-
-export function getManifestPath(networkName: string, contractAddress: string, contractName = "FreeTrialSubdomainRegistrar"): string {
-  return path.join(process.cwd(), "deployments", networkName, `${contractName}-${contractAddress.toLowerCase()}.json`);
-}
-
-export async function writeDeploymentManifest(manifest: DeploymentManifest): Promise<string> {
-  const outputPath = getManifestPath(manifest.network, manifest.contractAddress, manifest.contractName);
-  await fs.mkdir(path.dirname(outputPath), { recursive: true });
-  await fs.writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-  return outputPath;
-}
-
-export async function readDeploymentManifest(manifestPath: string): Promise<DeploymentManifest> {
-  const raw = await fs.readFile(manifestPath, "utf8");
-  return JSON.parse(raw) as DeploymentManifest;
-}
-
-export async function updateDeploymentManifest(
-  manifestPath: string,
-  update: (current: DeploymentManifest) => DeploymentManifest
-): Promise<void> {
-  const current = await readDeploymentManifest(manifestPath);
-  const next = update(current);
-  await fs.writeFile(manifestPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+export function getGitCommit(): string | undefined {
+  try {
+    return execSync("git rev-parse HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+  } catch {
+    return undefined;
+  }
 }
