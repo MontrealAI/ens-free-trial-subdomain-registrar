@@ -30,9 +30,13 @@ export type DeploymentManifest = {
   blockNumber: number | null;
   constructorArgs: readonly string[];
   timestamp: string;
+  buildProfile: string;
   verification: {
     command: string;
-    status: "pending";
+    status: "pending" | "verified" | "failed";
+    verifiedAt?: string;
+    explorerUrl?: string;
+    notes?: string;
   };
 };
 
@@ -48,3 +52,25 @@ export async function writeDeploymentManifest(manifest: DeploymentManifest): Pro
   return outputPath;
 }
 
+export async function readDeploymentManifest(manifestPath: string): Promise<DeploymentManifest> {
+  const raw = await fs.readFile(manifestPath, "utf8");
+  return JSON.parse(raw) as DeploymentManifest;
+}
+
+export async function updateDeploymentManifest(
+  manifestPath: string,
+  update: (current: DeploymentManifest) => DeploymentManifest
+): Promise<void> {
+  const current = await readDeploymentManifest(manifestPath);
+  const next = update(current);
+  await fs.writeFile(manifestPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
+}
+
+export function getManifestPath(networkName: string, contractAddress: string, contractName = "FreeTrialSubdomainRegistrar"): string {
+  return path.join(
+    process.cwd(),
+    "deployments",
+    networkName,
+    `${contractName}-${contractAddress.toLowerCase()}.json`
+  );
+}

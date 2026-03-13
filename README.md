@@ -60,7 +60,7 @@ This ensures:
 ```bash
 npm ci
 cp .env.example .env
-npm run build
+npm run build:production
 npm test
 npm run typecheck
 ```
@@ -129,6 +129,14 @@ npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
 ```
 
 Script checks mainnet chain id, requires explicit mainnet confirmation, and writes a deployment manifest under `deployments/mainnet/`.
+
+One-command alternative (deploy + verify):
+
+```bash
+npm run deploy-and-verify:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
+```
+
+Any flags after `--` are forwarded to the deploy step (for example `--confirm-mainnet`).
 
 ### Step B — Lock parent in ENS Manager
 
@@ -213,7 +221,20 @@ Scripts fail closed if this confirmation is missing.
 ### Step E — Verify contract
 
 ```bash
-npm run verify:mainnet -- 0xYourRegistrar 0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401
+npm run verify:mainnet -- --address 0xYourRegistrar
+```
+
+Verification script behavior:
+
+- mainnet-only chain ID check
+- reads constructor args from deployment manifest when available
+- supports explicit override: `--wrapper 0x...`
+- updates deployment manifest verification status (`pending` -> `verified`/`failed`)
+
+Explicit manifest form:
+
+```bash
+npm run verify:mainnet -- --address 0xYourRegistrar --manifest deployments/mainnet/FreeTrialSubdomainRegistrar-0xyourregistrar.json
 ```
 
 ## 8) Resolver records option
