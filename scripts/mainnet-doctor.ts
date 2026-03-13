@@ -57,6 +57,7 @@ async function main() {
   console.log(`parentEffectiveExpiry: ${effectiveExpiry}`);
 
   if (!registrarAddress) {
+    console.log("registrarAuthorised: n/a (no registrar provided)");
     console.log(`mode: pre-deploy (no registrar address/artifact)`);
     return;
   }

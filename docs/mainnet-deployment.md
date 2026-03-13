@@ -9,6 +9,11 @@ Active architecture uses only:
 - Root name: `alpha.agent.agi.eth`
 - Root node: `0xc74b6c5e8a0d97ed1fe28755da7d06a84593b4de92f6582327bc40f41d6c2d5e`
 
+## Toolchain pinning
+- Node `20.19.6`
+- Hardhat `2.x`
+- Solidity `0.8.24` (`optimizer: { enabled: true, runs: 200 }`, `viaIR: false`)
+
 ## Preconditions (manual ENS steps)
 1. Ensure `alpha.agent.agi.eth` is wrapped in NameWrapper.
 2. Ensure wrapped parent has `CANNOT_UNWRAP` burned (locking is irreversible).

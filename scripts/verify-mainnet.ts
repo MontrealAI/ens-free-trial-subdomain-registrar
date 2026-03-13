@@ -19,10 +19,16 @@ async function main() {
   if ((await ethers.provider.getNetwork()).chainId !== CHAIN_ID) throw new Error("Mainnet only.");
 
   const artifact = await readReleaseArtifact().catch(() => undefined);
-  const address = readFlagValue(process.argv, "address") || artifact?.address;
+  const cliAddress = readFlagValue(process.argv, "address");
+  const address = cliAddress || artifact?.address;
   if (!address || !ethers.isAddress(address)) throw new Error("Missing valid --address and no deployment artifact available.");
 
-  const constructorArguments = artifact ? artifact.constructorArgs : DEFAULT_ARGS;
+  if (!cliAddress && !artifact) {
+    throw new Error("No deployment artifact found. Provide --address for explicit verification target.");
+  }
+
+  const constructorArguments = !cliAddress && artifact ? artifact.constructorArgs : DEFAULT_ARGS;
+
   try {
     await run("verify:verify", { address, contract: CONTRACT_PATH, constructorArguments });
     console.log(`Verified ${address}`);
