@@ -31,7 +31,7 @@ npm run ci
 ```bash
 npm run doctor:mainnet -- --label 12345678
 npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --verify
-npm run verify:mainnet -- --address 0xYourRegistrar
+npm run verify:mainnet -- --address 0xYourRegistrar   # or omit --address to use deployment artifact
 npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate --approve-operator
 npm run register:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --label 12345678
 ```
