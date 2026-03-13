@@ -7,6 +7,14 @@ This walkthrough shows how to run this registrar for the real ENS parent name:
 
 > This repository remains generic. `alpha.agent.agi.eth` is a production-style example, not hardcoded protocol logic.
 
+## Live mainnet references
+
+- Registrar: `0x7aAE649184182A01Ac7D8D5d7873903015C08761`
+- Verified contract: https://etherscan.io/address/0x7aAE649184182A01Ac7D8D5d7873903015C08761#code
+- Deployment tx: https://etherscan.io/tx/0x70a17265c9f3bc142b5b1c660f32439084672bf60e21a5d20e1dd233f4f39e0a
+- Parent activation tx: https://etherscan.io/tx/0xddaa35a801612edd7dba3086e1740fb0c945d1eb1cc0c06f6b2ab78e713f6205
+- Deployment metadata: [`release-assets/mainnet-deployment.json`](../../release-assets/mainnet-deployment.json)
+
 ## What you type / What gets created
 
 - `LABEL=12345678` creates `12345678.alpha.agent.agi.eth`
@@ -81,7 +89,7 @@ REGISTRAR_ADDRESS=0xYourRegistrarAddress
 Before this step, in ENS Manager ensure the wrapped parent is locked (`CANNOT_UNWRAP` burned).
 
 ```bash
-PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate
+REGISTRAR_ADDRESS=0xYourRegistrarAddress PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate
 ```
 
 ## 4) Register `12345678.alpha.agent.agi.eth`
@@ -115,13 +123,13 @@ npm run register:mainnet -- \
 Deactivate (reversible):
 
 ```bash
-PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action deactivate
+REGISTRAR_ADDRESS=0xYourRegistrarAddress PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action deactivate
 ```
 
 Remove config (also blocks new mints):
 
 ```bash
-PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action remove
+REGISTRAR_ADDRESS=0xYourRegistrarAddress PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action remove
 ```
 
 Existing issued subnames remain valid until their current expiry. These actions stop **new** mints only.
@@ -157,6 +165,7 @@ Notes:
 Subname owner **can**:
 - Use the wrapped subname until expiry.
 - Use resolver records (if configured at registration).
+- Transfer ownership subject to NameWrapper fuse/permissions constraints.
 
 Subname owner **cannot**:
 - Renew / self-extend expiry through this registrar.
@@ -210,5 +219,5 @@ Use lowercase `a-z` and digits `0-9` only.
 Run:
 
 ```bash
-PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate
+REGISTRAR_ADDRESS=0xYourRegistrarAddress PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate
 ```
