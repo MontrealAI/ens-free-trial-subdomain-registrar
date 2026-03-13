@@ -13,10 +13,13 @@
 ## Canonical commands
 - Install: `npm ci`
 - Build: `npm run build`
+- Production build: `npm run build:production`
 - Test: `npm test`
 - Typecheck: `npm run typecheck`
 - Full CI-like local check: `npm run ci`
 - Deploy registrar (mainnet): `npm run deploy:mainnet`
+- Deploy + verify (mainnet): `npm run deploy-and-verify:mainnet`
+- Verify registrar (mainnet): `npm run verify:mainnet -- --address 0x...`
 - Approve + activate/deactivate parent: `npm run setup:parent:mainnet`
 - Register subname: `npm run register:mainnet -- --help`
 - Read-only mainnet preflight: `npm run doctor:mainnet -- --help`

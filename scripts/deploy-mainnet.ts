@@ -7,6 +7,7 @@ import {
 
 const MAINNET_CHAIN_ID = 1;
 const DEFAULT_WRAPPER = "0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401";
+const BUILD_PROFILE = "production-solc-0.8.17-optimizer-200";
 
 function requireAddress(name: string, value: string, ethersLib: { isAddress: (value: string) => boolean; isHexString?: (value: string) => boolean }): string {
   if (!ethersLib.isAddress(value)) {
@@ -70,7 +71,7 @@ async function main() {
   const address = await registrar.getAddress();
   const receipt = await registrar.deploymentTransaction()?.wait();
 
-  const verifyCommand = `npm run verify:mainnet -- ${address} ${wrapper}`;
+  const verifyCommand = `npm run verify:mainnet -- --address ${address}`;
   const manifestPath = await writeDeploymentManifest({
     network: network.name,
     chainId: chainId.toString(),
@@ -81,6 +82,7 @@ async function main() {
     blockNumber: receipt?.blockNumber ?? null,
     constructorArgs: [wrapper],
     timestamp: new Date().toISOString(),
+    buildProfile: BUILD_PROFILE,
     verification: {
       command: verifyCommand,
       status: "pending"
@@ -92,7 +94,7 @@ async function main() {
   console.log(`Manifest written: ${manifestPath}`);
   console.log("\nNext steps:");
   console.log(`1) Add REGISTRAR_ADDRESS=${address} to your .env`);
-  console.log(`2) Verify contract: ${verifyCommand}`);
+  console.log(`2) Verify contract (reads constructor args from manifest): ${verifyCommand}`);
   console.log("3) Lock your parent in ENS Manager (burn CANNOT_UNWRAP on parent)");
   console.log("4) Run: npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET");
 }
