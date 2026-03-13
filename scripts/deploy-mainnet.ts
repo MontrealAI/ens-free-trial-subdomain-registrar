@@ -49,7 +49,9 @@ async function main() {
   const kind = resolveContractKind();
 
   const wrapper = requireAddress("ENS_NAME_WRAPPER", process.env.ENS_NAME_WRAPPER || DEFAULT_WRAPPER, ethers);
-  const registry = requireAddress("ENS_REGISTRY", process.env.ENS_REGISTRY || DEFAULT_REGISTRY, ethers);
+  const registry = kind === "identity"
+    ? requireAddress("ENS_REGISTRY", process.env.ENS_REGISTRY || DEFAULT_REGISTRY, ethers)
+    : undefined;
   const provider = ethers.provider;
   const chainId = (await provider.getNetwork()).chainId;
 
@@ -69,7 +71,7 @@ async function main() {
   }
 
   const contractName = kind === "identity" ? "FreeTrialSubdomainRegistrarIdentity" : "FreeTrialSubdomainRegistrar";
-  const constructorArgs = kind === "identity" ? [wrapper, registry] : [wrapper];
+  const constructorArgs = kind === "identity" ? [wrapper, registry!] : [wrapper];
 
   console.log(`Network: ${network.name}`);
   console.log(`Chain ID: ${chainId.toString()}`);
