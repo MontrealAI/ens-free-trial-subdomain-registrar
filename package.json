@@ -13,14 +13,14 @@
     "test": "hardhat test",
     "typecheck": "tsc --noEmit",
     "clean": "hardhat clean",
-    "deploy:mainnet": "hardhat run scripts/deploy-mainnet.ts --network mainnet",
-    "verify:mainnet": "hardhat run scripts/verify-mainnet.ts --network mainnet",
-    "doctor:mainnet": "hardhat run scripts/mainnet-doctor.ts --network mainnet",
-    "setup:parent:mainnet": "hardhat run scripts/approve-and-setup-parent.ts --network mainnet",
-    "register:mainnet": "hardhat run scripts/register-subname.ts --network mainnet",
+    "deploy:mainnet": "node scripts/run-mainnet.js scripts/deploy-mainnet.ts",
+    "verify:mainnet": "node scripts/run-mainnet.js scripts/verify-mainnet.ts",
+    "doctor:mainnet": "node scripts/run-mainnet.js scripts/mainnet-doctor.ts",
+    "setup:parent:mainnet": "node scripts/run-mainnet.js scripts/approve-and-setup-parent.ts",
+    "register:mainnet": "node scripts/run-mainnet.js scripts/register-subname.ts",
     "ci": "npm run build && npm test && npm run typecheck",
-    "claim:mainnet": "hardhat run scripts/claim-identity.ts --network mainnet",
-    "sync:mainnet": "hardhat run scripts/sync-identity.ts --network mainnet"
+    "claim:mainnet": "node scripts/run-mainnet.js scripts/claim-identity.ts",
+    "sync:mainnet": "node scripts/run-mainnet.js scripts/sync-identity.ts"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",

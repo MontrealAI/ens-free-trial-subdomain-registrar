@@ -1,64 +1,55 @@
-# ENS Free Trial Subdomain Registrar Identity (Mainnet-Ready)
+# ENS Free-Trial Subdomain Registrar (Identity Edition)
 
-This repository is standardized on a **single production contract**:
-
+Production-ready mainnet workflow for **one active contract only**:
 - `contracts/FreeTrialSubdomainRegistrarIdentity.sol`
 
-It atomically does both in one transaction:
-1. Registers a wrapped ENS subname under `*.alpha.agent.agi.eth`
-2. Mints a soulbound identity NFT (`tokenId = uint256(node)`)
+This contract is root-scoped to:
+- root name: `alpha.agent.agi.eth`
+- root node: `0xc74b6c5e8a0d97ed1fe28755da7d06a84593b4de92f6582327bc40f41d6c2d5e`
 
-## Mainnet defaults
-- NameWrapper: `0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401`
-- ENS Registry: `0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e`
-- Parent name: `alpha.agent.agi.eth`
-- Parent node: `0xc74b6c5e8a0d97ed1fe28755da7d06a84593b4de92f6582327bc40f41d6c2d5e`
+It handles both:
+1. wrapped ENS subname registration
+2. soulbound ERC-721 identity minting (EIP-5192)
 
 ## Toolchain
-- Node.js `20.19.6`
+- Node `20.19.6`
 - Hardhat `2.x`
-- Solidity `0.8.24` (optimizer 200, viaIR false)
+- TypeScript
+- Solidity `0.8.24` (optimizer runs `200`, `viaIR: false`)
 
-## Install and checks
+## Install & checks
 ```bash
 npm ci
+npm run clean
 npm run build
 npm test
 npm run typecheck
+npm run ci
 ```
 
-## Mainnet operator flow
+## Mainnet commands
 ```bash
-# 1) Read-only preflight
-npm run doctor:mainnet -- --parent-name alpha.agent.agi.eth --label 12345678
-
-# 2) Deploy (writes release artifact)
+npm run doctor:mainnet -- --label 12345678
 npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --verify
-
-# 3) Setup parent + activate root
-npm run setup:parent:mainnet -- --registrar 0xYourRegistrar --confirm-mainnet I_UNDERSTAND_MAINNET --action activate --approve
-
-# 4) Register
-npm run register:mainnet -- --registrar 0xYourRegistrar --label 12345678 --confirm-mainnet I_UNDERSTAND_MAINNET
-
-# 5) Standalone verify retry
 npm run verify:mainnet -- --address 0xYourRegistrar
+npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate --approve-operator
+npm run register:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --label 12345678
+npm run claim:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --label 12345678
+npm run sync:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --label 12345678
 ```
 
-## Manual ENS prerequisites (cannot be safely auto-forced)
-- Parent `alpha.agent.agi.eth` must already be wrapped in NameWrapper.
-- Parent must be locked (`CANNOT_UNWRAP` burned).
-- Parent wrapped owner must approve registrar as NameWrapper operator if not yet approved.
+## Required ENS prerequisites (manual)
+1. `alpha.agent.agi.eth` must be wrapped in NameWrapper.
+2. Parent must be locked (`CANNOT_UNWRAP` burned).
+3. Deployed registrar must be authorized by wrapped parent owner (typically `setApprovalForAll`).
+4. Optional: transfer contract ownership to multisig after deployment.
 
-## Architecture guardrails
-- Free registration (`register` never accepts ETH).
-- 30-day max child expiry capped by effective parent expiry.
-- Root-scoped claim/sync only for `*.alpha.agent.agi.eth`.
-- Soulbound forever (approvals/transfers revert, EIP-5192 `Locked` emitted on mint).
+Notes:
+- Parent locking is irreversible.
+- Registration is free in protocol terms, but still costs gas.
+- Activation requires wrapper authorization.
 
-
-## Identity maintenance helpers
-```bash
-npm run claim:mainnet -- --identity 0xYourRegistrar --label 12345678 --confirm-mainnet I_UNDERSTAND_MAINNET
-npm run sync:mainnet -- --identity 0xYourRegistrar --token-id 123 --confirm-mainnet I_UNDERSTAND_MAINNET
-```
+## Legacy / historical deployment
+- Historical legacy contract (`FreeTrialSubdomainRegistrar`) live release `v1.0.0`:
+  - `0x7aAE649184182A01Ac7D8D5d7873903015C08761`
+- This repository’s **active** deployment flow no longer uses that legacy contract.
