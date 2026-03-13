@@ -11,18 +11,14 @@ import {
 } from "./utils/mainnet-safety";
 
 const MAINNET_CHAIN_ID = 1n;
-const CONTRACT_NAME = "FreeTrialSubdomainRegistrar";
 const DEFAULT_WRAPPER = "0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401";
+const DEFAULT_REGISTRY = "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e";
 
 function printUsage(): void {
   console.log(`Usage:
-  npm run verify:mainnet -- --address 0x... [--manifest deployments/mainnet/FreeTrialSubdomainRegistrar-0x....json] [--wrapper 0x...]
+  npm run verify:mainnet -- --address 0x... [--contract identity|legacy] [--manifest path] [--wrapper 0x...] [--registry 0x...]
 
-Notes:
-  - Mainnet-only script.
-  - If --manifest is provided (or default manifest exists for --address), constructor args are read from that manifest.
-  - --wrapper can be used as explicit constructor arg fallback.
-  - This script updates manifest verification status when a manifest file is available.`);
+Default contract mode is legacy.`);
 }
 
 function requireAddress(name: string, value: string | undefined): string {
@@ -30,6 +26,12 @@ function requireAddress(name: string, value: string | undefined): string {
     throw new Error(`${name} must be set to a valid address.`);
   }
   return value;
+}
+
+function contractName(kind: string): string {
+  if (kind === "identity") return "FreeTrialSubdomainRegistrarIdentity";
+  if (kind === "legacy") return "FreeTrialSubdomainRegistrar";
+  throw new Error("--contract must be either 'identity' or 'legacy'.");
 }
 
 function looksAlreadyVerified(message: string): boolean {
@@ -41,28 +43,38 @@ function isMissingFileError(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT";
 }
 
-function assertManifestAddressMatches(manifestPath: string, manifestAddress: string, targetAddress: string): void {
-  if (manifestAddress.toLowerCase() !== targetAddress.toLowerCase()) {
+function assertManifestMatchesTarget(
+  manifestPath: string,
+  manifest: DeploymentManifest,
+  expectedAddress: string,
+  expectedContractName: string
+): void {
+  const manifestAddress = requireAddress("manifest.contractAddress", manifest.contractAddress);
+  if (manifestAddress.toLowerCase() !== expectedAddress.toLowerCase()) {
     throw new Error(
-      `Manifest/address mismatch: ${manifestPath} contains contractAddress=${manifestAddress} but --address=${targetAddress}. Refusing to continue.`
+      `Manifest/address mismatch: ${manifestPath} contains contractAddress=${manifestAddress} but --address=${expectedAddress}. Refusing to continue.`
+    );
+  }
+
+  if (manifest.contractName !== expectedContractName) {
+    throw new Error(
+      `Manifest/contract mismatch: ${manifestPath} contains contractName=${manifest.contractName} but --contract resolves to ${expectedContractName}. Refusing to continue.`
     );
   }
 }
 
-async function resolveManifest(manifestPathArg: string | undefined, address: string): Promise<{ manifestPath?: string; manifest?: DeploymentManifest }> {
+async function resolveManifest(manifestPathArg: string | undefined, address: string, chosenContractName: string): Promise<{ manifestPath?: string; manifest?: DeploymentManifest }> {
   if (manifestPathArg) {
     const manifest = await readDeploymentManifest(manifestPathArg);
     return { manifestPath: manifestPathArg, manifest };
   }
 
-  const inferredPath = getManifestPath(network.name, address, CONTRACT_NAME);
+  const inferredPath = getManifestPath(network.name, address, chosenContractName);
   try {
     const manifest = await readDeploymentManifest(inferredPath);
     return { manifestPath: inferredPath, manifest };
   } catch (error) {
-    if (!isMissingFileError(error)) {
-      throw error;
-    }
+    if (!isMissingFileError(error)) throw error;
     return {};
   }
 }
@@ -79,47 +91,40 @@ async function main() {
   }
 
   const address = requireAddress("--address", readFlagValue(process.argv, "address"));
-  const wrapperArg = readFlagValue(process.argv, "wrapper");
-  const wrapperAddress = wrapperArg ? requireAddress("--wrapper", wrapperArg) : undefined;
+  const kind = readFlagValue(process.argv, "contract") || "legacy";
+  const chosenContractName = contractName(kind);
+
   const manifestPathArg = readFlagValue(process.argv, "manifest");
-
-  const { manifestPath, manifest } = await resolveManifest(manifestPathArg, address);
+  const { manifestPath, manifest } = await resolveManifest(manifestPathArg, address, chosenContractName);
   if (manifestPath && manifest) {
-    assertManifestAddressMatches(manifestPath, requireAddress("manifest.contractAddress", manifest.contractAddress), address);
+    assertManifestMatchesTarget(manifestPath, manifest, address, chosenContractName);
   }
 
-  const constructorWrapper = wrapperAddress || manifest?.constructorArgs?.[0] || process.env.ENS_NAME_WRAPPER || DEFAULT_WRAPPER;
+  const wrapper = readFlagValue(process.argv, "wrapper") || manifest?.constructorArgs?.[0] || process.env.ENS_NAME_WRAPPER || DEFAULT_WRAPPER;
+  const registry = readFlagValue(process.argv, "registry") || manifest?.constructorArgs?.[1] || process.env.ENS_REGISTRY || DEFAULT_REGISTRY;
 
-  if (!ethers.isAddress(constructorWrapper)) {
-    throw new Error(`Unable to resolve constructor wrapper address. Received: ${constructorWrapper}`);
-  }
+  const constructorArguments = kind === "identity"
+    ? [requireAddress("wrapper", wrapper), requireAddress("registry", registry)]
+    : [requireAddress("wrapper", wrapper)];
 
   const contractCode = await ethers.provider.getCode(address);
-  if (contractCode === "0x") {
-    throw new Error(`No contract code found at --address ${address}.`);
-  }
-
-  const verifyPayload = {
-    address,
-    constructorArguments: [constructorWrapper]
-  };
+  if (contractCode === "0x") throw new Error(`No contract code found at --address ${address}.`);
 
   console.log(`Network: ${network.name}`);
   console.log(`Chain ID: ${chainId.toString()}`);
-  console.log(`Contract: ${CONTRACT_NAME}`);
+  console.log(`Contract: ${chosenContractName}`);
   console.log(`Address: ${address}`);
-  console.log(`Constructor args: ["${constructorWrapper}"]`);
-  if (manifestPath) {
-    console.log(`Manifest: ${manifestPath}`);
-  } else {
-    console.log("Manifest: not found (verification will run without manifest update)");
-  }
+  console.log(`Constructor args: ${JSON.stringify(constructorArguments)}`);
 
   let status: "verified" | "failed" = "verified";
   let notes = "";
 
   try {
-    await run("verify:verify", verifyPayload);
+    await run("verify:verify", {
+      address,
+      contract: `contracts/${chosenContractName}.sol:${chosenContractName}`,
+      constructorArguments
+    });
     console.log("Verification submitted successfully.");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -147,9 +152,6 @@ async function main() {
       console.log(`Updated manifest verification status: ${status}`);
     }
   }
-
-  console.log("Done.");
-  console.log(`Explorer: https://etherscan.io/address/${address}#code`);
 }
 
 main().catch((error) => {
