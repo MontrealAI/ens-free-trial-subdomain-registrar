@@ -3,16 +3,20 @@ import "@nomicfoundation/hardhat-toolbox";
 import { subtask, type HardhatUserConfig } from "hardhat/config";
 import { TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD } from "hardhat/builtin-tasks/task-names";
 
-const SOLC_VERSION = "0.8.17";
-const SOLC_LONG_VERSION = "0.8.17+commit.8df45f5f";
+const LOCAL_SOLC_BUILDS: Record<string, { longVersion: string; compilerPath: string }> = {
+  "0.8.17": {
+    longVersion: "0.8.17+commit.8df45f5f",
+    compilerPath: require.resolve("solc/soljson.js")
+  }
+};
 
-// Use a pinned local solc-js build to avoid fragile remote compiler downloads.
 subtask(TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD).setAction(async ({ solcVersion }, _hre, runSuper) => {
-  if (solcVersion === SOLC_VERSION) {
+  const local = LOCAL_SOLC_BUILDS[solcVersion];
+  if (local) {
     return {
-      version: SOLC_VERSION,
-      longVersion: SOLC_LONG_VERSION,
-      compilerPath: require.resolve("solc/soljson.js"),
+      version: solcVersion,
+      longVersion: local.longVersion,
+      compilerPath: local.compilerPath,
       isSolcJs: true
     };
   }
@@ -22,13 +26,27 @@ subtask(TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD).setAction(async ({ solcVersion }, 
 
 const config: HardhatUserConfig = {
   solidity: {
-    version: SOLC_VERSION,
-    settings: {
-      optimizer: {
-        enabled: true,
-        runs: 200
+    compilers: [
+      {
+        version: "0.8.17",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200
+          }
+        }
+      },
+      {
+        version: "0.8.24",
+        settings: {
+          optimizer: {
+            enabled: true,
+            runs: 200
+          },
+          viaIR: false
+        }
       }
-    }
+    ]
   },
   networks: {
     mainnet: {

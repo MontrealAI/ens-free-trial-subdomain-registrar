@@ -2,7 +2,7 @@
   "name": "ens-free-trial-subdomain-registrar",
   "version": "1.0.0",
   "private": true,
-  "description": "Free 30-day ENS subname registrar with no child grace period and no owner renewals.",
+  "description": "ENS free-trial wrapped subname registrar and universal ENS-based identity primitive.",
   "engines": {
     "node": "20.19.6",
     "npm": ">=10"
@@ -20,7 +20,9 @@
     "setup:parent:mainnet": "hardhat run scripts/approve-and-setup-parent.ts --network mainnet",
     "test": "hardhat test",
     "typecheck": "tsc --noEmit",
-    "verify:mainnet": "hardhat run scripts/verify-mainnet.ts --network mainnet"
+    "verify:mainnet": "hardhat run scripts/verify-mainnet.ts --network mainnet",
+    "deploy:identity:mainnet": "hardhat run scripts/deploy-identity-mainnet.ts --network mainnet",
+    "verify:identity:mainnet": "hardhat run scripts/verify-identity-mainnet.ts --network mainnet"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
