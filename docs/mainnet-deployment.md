@@ -27,9 +27,10 @@ This document records the canonical public Ethereum Mainnet deployment and paren
 The deployed constructor parameters are:
 
 ```text
-nameWrapper_ = 0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401
-trialDuration_ = 2592000  // 30 days in seconds
+wrapper_ = 0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401
 ```
+
+Note: trial duration is a contract constant (`TRIAL_PERIOD = 30 days`), not a constructor argument.
 
 ## Activation function used
 
@@ -62,7 +63,7 @@ npm run verify:mainnet -- --address 0x7aAE649184182A01Ac7D8D5d7873903015C08761
 ### 3) Approve + activate parent
 
 ```bash
-PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate
+REGISTRAR_ADDRESS=0x7aAE649184182A01Ac7D8D5d7873903015C08761 PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate
 ```
 
 ### 4) Register example subname
@@ -95,13 +96,13 @@ npm run doctor:mainnet -- --registrar 0x7aAE649184182A01Ac7D8D5d7873903015C08761
 Stop new minting immediately:
 
 ```bash
-PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action deactivate
+REGISTRAR_ADDRESS=0x7aAE649184182A01Ac7D8D5d7873903015C08761 PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action deactivate
 ```
 
 Or remove registrar state for that parent:
 
 ```bash
-PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action remove
+REGISTRAR_ADDRESS=0x7aAE649184182A01Ac7D8D5d7873903015C08761 PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action remove
 ```
 
 These actions stop **new** free trial registrations. Previously minted names remain valid until their individual expiry.
