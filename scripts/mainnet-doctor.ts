@@ -26,8 +26,9 @@ async function main() {
   const net = await provider.getNetwork();
   if (net.chainId !== CHAIN_ID) throw new Error(`Mainnet only. chainId=${net.chainId}`);
 
-  const [signer] = await ethers.getSigners();
-  const signerBal = await provider.getBalance(signer.address);
+  const signer = await ethers.getSigners().then((all) => all[0]).catch(() => undefined);
+  const signerAddress = signer?.address;
+  const signerBal = signerAddress ? await provider.getBalance(signerAddress) : undefined;
   const wrapperCode = await provider.getCode(WRAPPER);
   const registryCode = await provider.getCode(REGISTRY);
   const artifact = await readReleaseArtifact().catch(() => undefined);
@@ -38,8 +39,8 @@ async function main() {
   console.log(`# mainnet doctor`);
   console.log(`chainId: ${net.chainId}`);
   console.log(`rpc: connected`);
-  console.log(`signer: ${signer.address}`);
-  console.log(`signerBalanceEth: ${ethers.formatEther(signerBal)}`);
+  console.log(`signer: ${signerAddress ?? "n/a (set DEPLOYER_PRIVATE_KEY for signer checks)"}`);
+  console.log(`signerBalanceEth: ${signerBal !== undefined ? ethers.formatEther(signerBal) : "n/a"}`);
   console.log(`wrapperCodePresent: ${wrapperCode !== "0x"}`);
   console.log(`ensRegistryCodePresent: ${registryCode !== "0x"}`);
   console.log(`rootName: ${ROOT_NAME}`);
