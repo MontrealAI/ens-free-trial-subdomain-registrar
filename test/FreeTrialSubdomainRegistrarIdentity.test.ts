@@ -13,8 +13,7 @@ describe("FreeTrialSubdomainRegistrarIdentity", function () {
     await wrapper.waitForDeployment();
 
     const identity = await ethers.deployContract("FreeTrialSubdomainRegistrarIdentity", [
-      await wrapper.getAddress(),
-      "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e"
+      await wrapper.getAddress()
     ]);
     await identity.waitForDeployment();
 

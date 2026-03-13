@@ -7,7 +7,6 @@ import {
 
 const MAINNET_CHAIN_ID = 1;
 const DEFAULT_WRAPPER = "0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401";
-const DEFAULT_REGISTRY = "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e";
 const BUILD_PROFILE = "production-solc-0.8.24-optimizer-200";
 
 type ContractKind = "identity" | "legacy";
@@ -33,7 +32,6 @@ function printUsage(): void {
 
 Optional:
   ENS_NAME_WRAPPER=0x... (defaults to mainnet NameWrapper)
-  ENS_REGISTRY=0x... (used by identity contract; defaults to ENS registry)
   MAINNET_CONFIRM=I_UNDERSTAND_MAINNET (env alternative to --confirm-mainnet)
 
 Default contract mode is legacy (operator-safe while setup flow targets legacy registrar).`);
@@ -68,9 +66,7 @@ async function main() {
   }
 
   const contractName = kind === "identity" ? "FreeTrialSubdomainRegistrarIdentity" : "FreeTrialSubdomainRegistrar";
-  const constructorArgs: string[] = kind === "identity"
-    ? [wrapper, requireAddress("ENS_REGISTRY", process.env.ENS_REGISTRY || DEFAULT_REGISTRY, ethers)]
-    : [wrapper];
+  const constructorArgs: string[] = [wrapper];
 
   console.log(`Network: ${network.name}`);
   console.log(`Chain ID: ${chainId.toString()}`);

@@ -14,7 +14,7 @@
 - Contract: `FreeTrialSubdomainRegistrarIdentity`
 - Source: `contracts/FreeTrialSubdomainRegistrarIdentity.sol`
 - Mainnet deployment: **not yet recorded in this repository**
-- Constructor shape: `(address wrapper, address registry)`
+- Constructor shape: `(address wrapper)`
 
 Mainnet constants:
 - ENS Registry: `0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e`

@@ -12,11 +12,10 @@ import {
 
 const MAINNET_CHAIN_ID = 1n;
 const DEFAULT_WRAPPER = "0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401";
-const DEFAULT_REGISTRY = "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e";
 
 function printUsage(): void {
   console.log(`Usage:
-  npm run verify:mainnet -- --address 0x... [--contract identity|legacy] [--manifest path] [--wrapper 0x...] [--registry 0x...]
+  npm run verify:mainnet -- --address 0x... [--contract identity|legacy] [--manifest path] [--wrapper 0x...]
 
 Default contract mode is legacy.`);
 }
@@ -101,11 +100,7 @@ async function main() {
   }
 
   const wrapper = readFlagValue(process.argv, "wrapper") || manifest?.constructorArgs?.[0] || process.env.ENS_NAME_WRAPPER || DEFAULT_WRAPPER;
-  const registry = readFlagValue(process.argv, "registry") || manifest?.constructorArgs?.[1] || process.env.ENS_REGISTRY || DEFAULT_REGISTRY;
-
-  const constructorArguments = kind === "identity"
-    ? [requireAddress("wrapper", wrapper), requireAddress("registry", registry)]
-    : [requireAddress("wrapper", wrapper)];
+  const constructorArguments = [requireAddress("wrapper", wrapper)];
 
   const contractCode = await ethers.provider.getCode(address);
   if (contractCode === "0x") throw new Error(`No contract code found at --address ${address}.`);

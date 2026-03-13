@@ -44,7 +44,6 @@ error DottedLabelNotAllowed(uint256 index);
 error InvalidLabelCharacter(uint256 index, bytes1 character);
 error EtherNotAccepted();
 error InvalidWrapper();
-error InvalidRegistry();
 error Soulbound();
 error IdentityNotEligible(uint256 tokenId);
 error IdentityAlreadyAligned(uint256 tokenId);
@@ -59,7 +58,6 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, ReentrancyGuard, IERC519
     uint256 public constant MAX_LABEL_LENGTH = 63;
 
     INameWrapperIdentity public immutable wrapper;
-    address public immutable registry;
     mapping(bytes32 => bool) public activeParents;
 
     event ParentConfigured(bytes32 indexed parentNode, bool active);
@@ -67,11 +65,9 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, ReentrancyGuard, IERC519
     event IdentityClaimed(bytes32 indexed node, address indexed owner);
     event IdentitySynced(uint256 indexed tokenId, bool burned, address wrappedOwner, uint64 wrappedExpiry);
 
-    constructor(address wrapper_, address registry_) ERC721("ENS Free Trial Identity", "ENSID") {
+    constructor(address wrapper_) ERC721("ENS Free Trial Identity", "ENSID") {
         if (wrapper_ == address(0)) revert InvalidWrapper();
-        if (registry_ == address(0)) revert InvalidRegistry();
         wrapper = INameWrapperIdentity(wrapper_);
-        registry = registry_;
     }
 
     receive() external payable {
