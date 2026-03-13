@@ -34,6 +34,26 @@ function contractName(kind: string): string {
   throw new Error("--contract must be either 'identity' or 'legacy'.");
 }
 
+function assertManifestMatchesSelection(
+  manifestPath: string,
+  manifest: DeploymentManifest,
+  expectedAddress: string,
+  expectedContractName: string
+): void {
+  const manifestAddress = requireAddress("manifest.contractAddress", manifest.contractAddress);
+  if (manifestAddress.toLowerCase() !== expectedAddress.toLowerCase()) {
+    throw new Error(
+      `Manifest/address mismatch: ${manifestPath} contains contractAddress=${manifestAddress} but --address=${expectedAddress}.`
+    );
+  }
+
+  if (manifest.contractName !== expectedContractName) {
+    throw new Error(
+      `Manifest/contract mismatch: ${manifestPath} contains contractName=${manifest.contractName} but --contract resolved to ${expectedContractName}.`
+    );
+  }
+}
+
 function looksAlreadyVerified(message: string): boolean {
   const lower = message.toLowerCase();
   return lower.includes("already verified") || lower.includes("already been verified");
@@ -76,6 +96,9 @@ async function main() {
 
   const manifestPathArg = readFlagValue(process.argv, "manifest");
   const { manifestPath, manifest } = await resolveManifest(manifestPathArg, address, chosenContractName);
+  if (manifestPath && manifest) {
+    assertManifestMatchesSelection(manifestPath, manifest, address, chosenContractName);
+  }
 
   const wrapper = readFlagValue(process.argv, "wrapper") || manifest?.constructorArgs?.[0] || process.env.ENS_NAME_WRAPPER || DEFAULT_WRAPPER;
   const registry = readFlagValue(process.argv, "registry") || manifest?.constructorArgs?.[1] || process.env.ENS_REGISTRY || DEFAULT_REGISTRY;
