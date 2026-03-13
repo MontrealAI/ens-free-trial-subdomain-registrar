@@ -4,148 +4,145 @@ import { ethers } from "hardhat";
 const CANNOT_UNWRAP = 1n;
 const CANNOT_TRANSFER = 1n << 2n;
 const PARENT_CANNOT_CONTROL = 1n << 16n;
+const IS_DOT_ETH = 1n << 17n;
 const THIRTY_DAYS = 30n * 24n * 60n * 60n;
+const PARENT_NODE = "0xc74b6c5e8a0d97ed1fe28755da7d06a84593b4de92f6582327bc40f41d6c2d5e";
+const PARENT_NAME = "alpha.agent.agi.eth";
 
 describe("FreeTrialSubdomainRegistrarIdentity", function () {
   async function fixture() {
-    const [deployer, user, other] = await ethers.getSigners();
+    const [owner, user, other] = await ethers.getSigners();
     const wrapper = await ethers.deployContract("MockNameWrapper");
-    await wrapper.waitForDeployment();
-
+    const registry = await ethers.deployContract("MockENSRegistry");
     const identity = await ethers.deployContract("FreeTrialSubdomainRegistrarIdentity", [
-      await wrapper.getAddress()
+      await wrapper.getAddress(),
+      await registry.getAddress(),
+      PARENT_NODE,
+      PARENT_NAME
     ]);
-    await identity.waitForDeployment();
 
-    const parentNode = ethers.namehash("example.eth");
-    const latest = await ethers.provider.getBlock("latest");
-    const now = BigInt(latest!.timestamp);
+    const now = BigInt((await ethers.provider.getBlock("latest"))!.timestamp);
+    await wrapper.setNameData(PARENT_NODE, owner.address, Number(CANNOT_UNWRAP), Number(now + THIRTY_DAYS + 5000n), true);
+    await wrapper.setCanModify(PARENT_NODE, await identity.getAddress(), true);
+    await identity.activateRoot();
 
-    await wrapper.setNameData(parentNode, await wrapper.getAddress(), Number(CANNOT_UNWRAP), Number(now + THIRTY_DAYS + 500n), true);
-    await wrapper.setCanModify(parentNode, await identity.getAddress(), true);
-    await wrapper.setCanModify(parentNode, deployer.address, true);
-    await identity.setupDomain(parentNode, true);
-
-    return { deployer, user, other, wrapper, identity: identity as any, parentNode };
+    return { owner, user, other, wrapper: wrapper as any, registry: registry as any, identity: identity as any };
   }
 
-  it("registers wrapped subname and mints identity atomically", async function () {
-    const { identity, wrapper, parentNode, user } = await fixture();
-
-    await identity.registerIdentity(parentNode, "trialpass8", user.address);
-
-    const node = ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))]));
-    const tokenId = BigInt(node);
-
-    expect(await identity.ownerOf(tokenId)).to.equal(user.address);
-    const [wrappedOwner, wrappedFuses] = await wrapper.getData(tokenId);
-    expect(wrappedOwner).to.equal(user.address);
-    expect(BigInt(wrappedFuses) & CANNOT_UNWRAP).to.equal(CANNOT_UNWRAP);
-    expect(BigInt(wrappedFuses) & CANNOT_TRANSFER).to.equal(CANNOT_TRANSFER);
-    expect(BigInt(wrappedFuses) & PARENT_CANNOT_CONTROL).to.equal(PARENT_CANNOT_CONTROL);
+  it("validates labels", async function () {
+    const { identity } = await fixture();
+    expect(await identity.validateLabel("12345678")).to.equal(true);
+    expect(await identity.validateLabel("bad.label")).to.equal(false);
+    expect(await identity.validateLabel("ABCDEF12")).to.equal(false);
   });
 
-  it("enforces soulbound transfer and approval restrictions", async function () {
-    const { identity, parentNode, user, other } = await fixture();
-    await identity.registerIdentity(parentNode, "trialpass8", user.address);
+  it("registers + mints + emits Locked", async function () {
+    const { identity, wrapper, user } = await fixture();
+    await expect(identity.connect(user).register("12345678")).to.emit(identity, "Locked");
 
-    const node = ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))]));
+    const node = ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [PARENT_NODE, ethers.keccak256(ethers.toUtf8Bytes("12345678"))]));
     const tokenId = BigInt(node);
+    expect(await identity.ownerOf(tokenId)).to.equal(user.address);
 
+    const [wrappedOwner, fuses] = await wrapper.getData(tokenId);
+    expect(wrappedOwner).to.equal(user.address);
+    expect((BigInt(fuses) & CANNOT_UNWRAP) !== 0n).to.equal(true);
+    expect((BigInt(fuses) & CANNOT_TRANSFER) !== 0n).to.equal(true);
+    expect((BigInt(fuses) & PARENT_CANNOT_CONTROL) !== 0n).to.equal(true);
+  });
+
+  it("claim is root-scoped by label", async function () {
+    const { identity, wrapper, user } = await fixture();
+    const externalNode = ethers.namehash("outside.eth");
+    const now = BigInt((await ethers.provider.getBlock("latest"))!.timestamp);
+    await wrapper.setNameData(externalNode, user.address, 0, Number(now + THIRTY_DAYS), true);
+
+    await expect(identity.connect(user).claimIdentity("outside00")).to.be.revertedWithCustomError(identity, "IdentityNotEligible");
+  });
+
+  it("pause/unpause blocks register only", async function () {
+    const { identity, user } = await fixture();
+    await identity.pause();
+    await expect(identity.connect(user).register("12345678")).to.be.revertedWith("Pausable: paused");
+    await identity.unpause();
+    await identity.connect(user).register("12345678");
+  });
+
+  it("activate/deactivate root", async function () {
+    const { identity, user } = await fixture();
+    await identity.deactivateRoot();
+    await expect(identity.connect(user).register("12345678")).to.be.revertedWithCustomError(identity, "RootNotActive");
+    await identity.activateRoot();
+    await identity.connect(user).register("12345678");
+  });
+
+  it("is soulbound", async function () {
+    const { identity, user, other } = await fixture();
+    await identity.connect(user).register("12345678");
+    const tokenId = BigInt(ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [PARENT_NODE, ethers.keccak256(ethers.toUtf8Bytes("12345678"))])));
     await expect(identity.connect(user).transferFrom(user.address, other.address, tokenId)).to.be.revertedWithCustomError(identity, "Soulbound");
     await expect(identity.connect(user).approve(other.address, tokenId)).to.be.revertedWithCustomError(identity, "Soulbound");
-    expect(await identity.locked(tokenId)).to.equal(true);
   });
 
-
-  it("registerIdentity works for contract owners without ERC721Receiver", async function () {
-    const { identity, wrapper, parentNode } = await fixture();
-
-    await identity.registerIdentity(parentNode, "contract8", await wrapper.getAddress());
-
-    const node = ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("contract8"))]));
+  it("burns on expiry sync and supports re-registration", async function () {
+    const { identity, wrapper, user } = await fixture();
+    await identity.connect(user).register("12345678");
+    const node = ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [PARENT_NODE, ethers.keccak256(ethers.toUtf8Bytes("12345678"))]));
     const tokenId = BigInt(node);
+    const [owner, fuses] = await wrapper.getData(tokenId);
+    const now = BigInt((await ethers.provider.getBlock("latest"))!.timestamp);
+    await wrapper.setNameData(node, owner, fuses, Number(now - 1n), true);
+    await identity.syncIdentity(tokenId);
+    await expect(identity.ownerOf(tokenId)).to.be.reverted;
 
-    expect(await identity.ownerOf(tokenId)).to.equal(await wrapper.getAddress());
+    await wrapper.setNameData(node, ethers.ZeroAddress, Number(fuses), Number(now - 1n), true);
+    await identity.connect(user).register("12345678");
+    expect(await identity.ownerOf(tokenId)).to.equal(user.address);
   });
 
-  it("claimIdentity mints to wrapped owner when identity missing", async function () {
-    const { identity, wrapper, parentNode, user } = await fixture();
-    const node = ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("backfill88"))]));
-
-    const latest = await ethers.provider.getBlock("latest");
-    const now = BigInt(latest!.timestamp);
-    await wrapper.setNameData(node, user.address, Number(CANNOT_UNWRAP), Number(now + THIRTY_DAYS), true);
-
-    await identity.connect(user).claimIdentity(node);
-    expect(await identity.ownerOf(BigInt(node))).to.equal(user.address);
-  });
-
-  it("syncIdentity burns when wrapped ownership desyncs", async function () {
-    const { identity, wrapper, parentNode, user, other } = await fixture();
-    await identity.registerIdentity(parentNode, "trialpass8", user.address);
-
-    const node = ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))]));
+  it("burns on desync owner change", async function () {
+    const { identity, wrapper, user, other } = await fixture();
+    await identity.connect(user).register("12345678");
+    const node = ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [PARENT_NODE, ethers.keccak256(ethers.toUtf8Bytes("12345678"))]));
     const tokenId = BigInt(node);
-
     const [, fuses, expiry] = await wrapper.getData(tokenId);
     await wrapper.setNameData(node, other.address, fuses, expiry, true);
-
-    await identity.syncIdentity(tokenId);
+    await identity.syncIdentityByLabel("12345678");
     await expect(identity.ownerOf(tokenId)).to.be.reverted;
   });
 
-
-  it("tokenURI owner field uses standard 20-byte hex address format", async function () {
-    const { identity, parentNode, user } = await fixture();
-    await identity.registerIdentity(parentNode, "trialpass8", user.address);
-
-    const node = ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))]));
-    const tokenId = BigInt(node);
-
+  it("tokenURI deterministic fields and full-name reconstruction", async function () {
+    const { identity, user } = await fixture();
+    await identity.connect(user).register("12345678");
+    const tokenId = BigInt(ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [PARENT_NODE, ethers.keccak256(ethers.toUtf8Bytes("12345678"))])));
     const uri = await identity.tokenURI(tokenId);
-    const encodedJson = uri.replace("data:application/json;base64,", "");
-    const decodedJson = Buffer.from(encodedJson, "base64").toString("utf8");
-    const metadata = JSON.parse(decodedJson);
-
-    const encodedSvg = String(metadata.image).replace("data:image/svg+xml;base64,", "");
-    const decodedSvg = Buffer.from(encodedSvg, "base64").toString("utf8");
-
-    expect(decodedSvg).to.include(user.address.toLowerCase());
+    const json = JSON.parse(Buffer.from(uri.replace("data:application/json;base64,", ""), "base64").toString("utf8"));
+    expect(json.name).to.equal("12345678.alpha.agent.agi.eth");
+    expect(json.extension.parent_node).to.equal(PARENT_NODE);
+    expect(json.image.startsWith("data:image/svg+xml;base64,")).to.equal(true);
   });
 
-  it("tokenURI is fully onchain json", async function () {
-    const { identity, parentNode, user } = await fixture();
-    await identity.registerIdentity(parentNode, "trialpass8", user.address);
-
-    const node = ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))]));
-    const tokenId = BigInt(node);
-
-    const uri = await identity.tokenURI(tokenId);
-    expect(uri.startsWith("data:application/json;base64,")).to.equal(true);
+  it("mainnet constant namehash matches", async function () {
+    const { identity } = await fixture();
+    const actual = await identity.namehash(PARENT_NAME);
+    expect(actual).to.equal(PARENT_NODE);
   });
 
-  it("rejects dotted labels and full-name style label inputs", async function () {
-    const { identity, parentNode, user } = await fixture();
+  it("parent .eth expiry subtracts grace period", async function () {
+    const [owner] = await ethers.getSigners();
+    const wrapper = await ethers.deployContract("MockNameWrapper");
+    const registry = await ethers.deployContract("MockENSRegistry");
+    const identity = await ethers.deployContract("FreeTrialSubdomainRegistrarIdentity", [
+      await wrapper.getAddress(),
+      await registry.getAddress(),
+      PARENT_NODE,
+      PARENT_NAME
+    ]);
 
-    await expect(identity.registerIdentity(parentNode, "bad.label", user.address)).to.be.revertedWithCustomError(identity, "DottedLabelNotAllowed");
-    await expect(identity.registerIdentity(parentNode, "Aliceagent", user.address)).to.be.revertedWithCustomError(identity, "InvalidLabelCharacter");
+    const now = BigInt((await ethers.provider.getBlock("latest"))!.timestamp);
+    await wrapper.setNameData(PARENT_NODE, owner.address, Number(CANNOT_UNWRAP | IS_DOT_ETH), Number(now + THIRTY_DAYS + 90n * 24n * 60n * 60n + 10n), true);
+    await wrapper.setCanModify(PARENT_NODE, await identity.getAddress(), true);
+    await identity.activateRoot();
+    await expect(identity.register("12345678")).to.not.be.reverted;
   });
-
-  it("syncIdentity burns after wrapped expiry", async function () {
-    const { identity, wrapper, parentNode, user } = await fixture();
-    await identity.registerIdentity(parentNode, "trialpass8", user.address);
-
-    const node = ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("trialpass8"))]));
-    const tokenId = BigInt(node);
-
-    const [owner, fuses] = await wrapper.getData(tokenId);
-    const latest = await ethers.provider.getBlock("latest");
-    const now = BigInt(latest!.timestamp);
-    await wrapper.setNameData(node, owner, fuses, Number(now - 1n), true);
-
-    await identity.syncIdentity(tokenId);
-    await expect(identity.ownerOf(tokenId)).to.be.reverted;
-  });
-
 });
