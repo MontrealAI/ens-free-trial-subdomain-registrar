@@ -191,7 +191,7 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
     }
 
     function syncIdentityByLabel(string calldata label) external returns (bool burned) {
-        if (!_isValidLabel(label)) return false;
+        if (!_isValidLabel(label)) revert InvalidLabel();
         burned = _syncIdentity(uint256(_nodeForLabel(label)));
     }
 
@@ -379,7 +379,7 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
             effectiveExpiry = expiry - PARENT_GRACE_PERIOD;
         }
 
-        usable = effectiveExpiry > block.timestamp;
+        usable = effectiveExpiry > block.timestamp && parentLockedOut && registrarAuthorisedOut;
     }
 
     function _wrappedState(bytes32 node) internal view returns (address owner, uint32 fuses, uint64 expiry) {

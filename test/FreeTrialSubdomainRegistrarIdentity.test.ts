@@ -101,6 +101,21 @@ describe("FreeTrialSubdomainRegistrarIdentity", function () {
     await wrapper.setNameData(node, bob.address, fuses, expiry, true);
     await registrar.syncIdentityByLabel("12345678");
     await expect(registrar.ownerOf(tokenId)).to.be.reverted;
+
+    await expect(registrar.syncIdentityByLabel("bad.label")).to.be.revertedWithCustomError(registrar, "InvalidLabel");
+  });
+
+  it("preview reports parent-unusable when parent lock/auth checks fail", async function () {
+    const { registrar, wrapper, owner } = await deployFixture();
+    await wrapper.setCanModify(ROOT_NODE, await registrar.getAddress(), false);
+    const unauthorised = await registrar.preview("12345678");
+    expect(unauthorised.status).to.equal(6n);
+
+    await wrapper.setCanModify(ROOT_NODE, await registrar.getAddress(), true);
+    const now = BigInt((await ethers.provider.getBlock("latest"))!.timestamp);
+    await wrapper.setNameData(ROOT_NODE, owner.address, Number(IS_DOT_ETH), Number(now + THIRTY_DAYS + NINETY_DAYS + 1000n), true);
+    const unlocked = await registrar.preview("12345678");
+    expect(unlocked.status).to.equal(6n);
   });
 
   it("supports re-registration after expiry and refreshes token data", async function () {
