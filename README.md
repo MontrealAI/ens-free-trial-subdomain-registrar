@@ -61,4 +61,8 @@ npm run verify:mainnet -- --address 0xYourRegistrarAddress
 # Deploy/verify identity explicitly
 npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --contract identity
 npm run verify:mainnet -- --address 0xYourIdentityAddress --contract identity
+
+# Identity lifecycle ops (when identity is deployed)
+npm run claim:mainnet -- --identity 0xYourIdentityAddress --node 0xNamehash --confirm-mainnet I_UNDERSTAND_MAINNET
+npm run sync:mainnet -- --identity 0xYourIdentityAddress --token-id 123 --confirm-mainnet I_UNDERSTAND_MAINNET
 ```

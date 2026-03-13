@@ -23,11 +23,13 @@
 - Verify (mainnet): `npm run verify:mainnet -- --address 0x... --contract identity|legacy`
 - Setup parent for registrar flow: `npm run setup:parent:mainnet`
 - Register helper (legacy registrar flow): `npm run register:mainnet -- --help`
+- Identity claim helper: `npm run claim:mainnet -- --help`
+- Identity sync helper: `npm run sync:mainnet -- --help`
 - Read-only doctor: `npm run doctor:mainnet -- --help`
 
 ## Live release vs next release
 - Current live release: `v1.0.0` (`FreeTrialSubdomainRegistrar` at `0x7aAE649184182A01Ac7D8D5d7873903015C08761`).
-- Next planned flagship release: `FreeTrialSubdomainRegistrarIdentity` (deployment pending until real onchain metadata is added).
+- Next planned flagship release: `FreeTrialSubdomainRegistrarIdentity` (deployment pending; do not claim live deployment before manifest + explorer proof exist).
 - Never invent deployment data or release claims.
 
 ## Product invariants (non-negotiable)
