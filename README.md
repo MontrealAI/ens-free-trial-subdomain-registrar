@@ -1,38 +1,55 @@
-# ENS Free Trial Subdomain Registrar
+# ENS Free Trial Subdomain Registrar + Identity Primitive
 
 [![CI status](https://github.com/MontrealAI/ens-free-trial-subdomain-registrar/actions/workflows/ci.yml/badge.svg)](https://github.com/MontrealAI/ens-free-trial-subdomain-registrar/actions/workflows/ci.yml)
 [![Latest release](https://img.shields.io/github/v/release/MontrealAI/ens-free-trial-subdomain-registrar?display_name=tag)](https://github.com/MontrealAI/ens-free-trial-subdomain-registrar/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Node.js 20.19.6](https://img.shields.io/badge/node-20.19.6-339933.svg)](https://nodejs.org/)
-[![Live on Ethereum Mainnet](https://img.shields.io/badge/mainnet-live-3C3C3D.svg)](https://etherscan.io/address/0x7aAE649184182A01Ac7D8D5d7873903015C08761#code)
+[![Legacy registrar live on Ethereum Mainnet](https://img.shields.io/badge/mainnet-live%20(v1.0.0)-3C3C3D.svg)](https://etherscan.io/address/0x7aAE649184182A01Ac7D8D5d7873903015C08761#code)
 
-Production-focused ENS subname registrar for **free, non-renewable 30-day wrapped trials**.
+This repository now has two clearly separated tracks:
 
-## Live mainnet deployment
+1. **Current live infrastructure (v1.0.0):** `FreeTrialSubdomainRegistrar` on Ethereum mainnet.
+2. **Next flagship contract:** `FreeTrialSubdomainRegistrarIdentity` — a universal ENS-based identity primitive that atomically registers a wrapped subname and mints a soulbound identity NFT.
 
-- **Contract:** `FreeTrialSubdomainRegistrar`
-- **Address:** [`0x7aAE649184182A01Ac7D8D5d7873903015C08761`](https://etherscan.io/address/0x7aAE649184182A01Ac7D8D5d7873903015C08761#code)
-- **Deployment tx:** [`0x70a17265c9f3bc142b5b1c660f32439084672bf60e21a5d20e1dd233f4f39e0a`](https://etherscan.io/tx/0x70a17265c9f3bc142b5b1c660f32439084672bf60e21a5d20e1dd233f4f39e0a)
-- **Parent activation tx:** [`0xddaa35a801612edd7dba3086e1740fb0c945d1eb1cc0c06f6b2ab78e713f6205`](https://etherscan.io/tx/0xddaa35a801612edd7dba3086e1740fb0c945d1eb1cc0c06f6b2ab78e713f6205)
-- **Mainnet deployment guide:** [`docs/mainnet-deployment.md`](docs/mainnet-deployment.md)
-- **Latest release notes:** [`CHANGELOG.md`](CHANGELOG.md)
+## What is live today vs next
 
-## Core behavior (invariants)
+### Live today (already deployed)
+- Contract: `FreeTrialSubdomainRegistrar`
+- Mainnet address: `0x7aAE649184182A01Ac7D8D5d7873903015C08761`
+- Verified: https://etherscan.io/address/0x7aAE649184182A01Ac7D8D5d7873903015C08761#code
+- Release: `v1.0.0`
 
-- Registration is free.
-- Child expiry is always `min(block.timestamp + 30 days, parent effective expiry)`.
-- Child receives no grace period of its own.
-- For `.eth` parents, grace only impacts parent effective expiry cap and never extends child trial beyond 30 days.
-- Child owner is never granted `CAN_EXTEND_EXPIRY` and cannot self-renew through this system.
-- Labels are strict: lowercase alphanumeric only, length 8–63, single-label input only (no dotted labels/full names).
+### Next release (prepared in this repo)
+- Contract: `FreeTrialSubdomainRegistrarIdentity`
+- Mainnet deployment status: **not deployed yet (deployment pending)**
+- Canonical contract source: `contracts/FreeTrialSubdomainRegistrarIdentity.sol`
 
-## Main docs
+## Identity primitive summary
 
-- **Mainnet deployment + activation details:** [`docs/mainnet-deployment.md`](docs/mainnet-deployment.md)
-- **Flagship operator walkthrough (`alpha.agent.agi.eth`):** [`docs/use-cases/alpha-agent-agi-eth.md`](docs/use-cases/alpha-agent-agi-eth.md)
-- **Etherscan no-CLI walkthrough:** [`docs/etherscan-web-guide.md`](docs/etherscan-web-guide.md)
-- **Release workflow:** [`docs/release-process.md`](docs/release-process.md)
-- **Security policy:** [`SECURITY.md`](SECURITY.md)
+`FreeTrialSubdomainRegistrarIdentity` keeps registrar invariants and adds identity semantics:
+- Atomic wrapped subname registration + NFT mint in one transaction.
+- `tokenId = uint256(node)`.
+- Soulbound NFT posture (`transfer/approve` disabled, EIP-5192 `locked`).
+- Onchain SVG image + onchain JSON metadata.
+- Permissionless `syncIdentity(tokenId)` to burn stale/desynced identities.
+- `claimIdentity(node)` for legacy/backfill cases where wrapped ownership already exists.
+
+## Product invariants
+
+- Registration remains free.
+- Child expiry remains `min(block.timestamp + 30 days, parent effective expiry)`.
+- No child grace period / no child self-renewal path.
+- Labels: lowercase alphanumeric only, length 8–63.
+- First-degree labels only (no dots / no full ENS names as label input).
+- No protocol hardcoding of `alpha.agent.agi.eth`.
+
+## Documentation map
+
+- Mainnet deployment history and status: [`docs/mainnet-deployment.md`](docs/mainnet-deployment.md)
+- Flagship identity contract doc: [`docs/contracts/free-trial-subdomain-registrar-identity.md`](docs/contracts/free-trial-subdomain-registrar-identity.md)
+- Legacy flagship use-case (`alpha.agent.agi.eth`): [`docs/use-cases/alpha-agent-agi-eth.md`](docs/use-cases/alpha-agent-agi-eth.md)
+- Release process: [`docs/release-process.md`](docs/release-process.md)
+- Releases: [`docs/releases/`](docs/releases)
 
 ## Install and validate
 
@@ -43,38 +60,14 @@ npm test
 npm run typecheck
 ```
 
-Node.js runtime is pinned to **20.19.6** via `.nvmrc` and `.node-version`.
-
-## Mainnet commands
+## Mainnet operator commands
 
 ```bash
-# 1) deploy (requires explicit mainnet confirmation)
+# legacy registrar deploy/verify
 npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
-
-# 2) verify (use the address printed by deploy step)
 npm run verify:mainnet -- --address 0xYourRegistrarAddress
 
-# 3) setup parent (requires REGISTRAR_ADDRESS + mainnet confirmation)
-REGISTRAR_ADDRESS=0xYourRegistrarAddress \
-PARENT_NAME=alpha.agent.agi.eth \
-npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate
-
-# 4) registration helpers
-npm run register:mainnet -- --help
-npm run doctor:mainnet -- --help
+# identity deploy/verify (next release path)
+npm run deploy:identity:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
+npm run verify:identity:mainnet -- --address 0xYourIdentityAddress
 ```
-
-## Flagship example
-
-This repository remains generic; the following is a real production example:
-
-- Parent: `alpha.agent.agi.eth`
-- Parent node: `0xc74b6c5e8a0d97ed1fe28755da7d06a84593b4de92f6582327bc40f41d6c2d5e`
-- `LABEL=12345678` => `12345678.alpha.agent.agi.eth`
-- `LABEL=ethereum` => `ethereum.alpha.agent.agi.eth`
-
-## Releases
-
-- Tags follow semantic versioning (`vMAJOR.MINOR.PATCH`).
-- First stable mainnet release target: **`v1.0.0`**.
-- See [`docs/release-process.md`](docs/release-process.md) for the exact maintainer checklist and `gh release` command.
