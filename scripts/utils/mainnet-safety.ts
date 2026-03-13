@@ -3,21 +3,41 @@ import path from "node:path";
 
 import { readFlagValue } from "./cli-flags";
 
-const MAINNET_CONFIRM_PHRASE = "I_UNDERSTAND_MAINNET";
+export const MAINNET_CONFIRM_PHRASE = "I_UNDERSTAND_MAINNET";
+export const RELEASE_ARTIFACT_PATH = "release-assets/mainnet-free-trial-subdomain-registrar-identity.json";
 
 export function requireMainnetBroadcastConfirmation(argv: readonly string[], action: string): void {
-  const flagValue = readFlagValue(argv, "confirm-mainnet");
-  const envValue = process.env.MAINNET_CONFIRM;
-  const provided = flagValue || envValue;
-
-  if (provided === MAINNET_CONFIRM_PHRASE) return;
-
+  const confirm = readFlagValue(argv, "confirm-mainnet") || process.env.MAINNET_CONFIRM;
+  if (confirm === MAINNET_CONFIRM_PHRASE) return;
   throw new Error(
-    [
-      `Refusing to ${action} without explicit mainnet confirmation.`,
-      `Set --confirm-mainnet ${MAINNET_CONFIRM_PHRASE} or MAINNET_CONFIRM=${MAINNET_CONFIRM_PHRASE}.`
-    ].join(" ")
+    `Refusing to ${action} without explicit mainnet confirmation. Use --confirm-mainnet ${MAINNET_CONFIRM_PHRASE} or MAINNET_CONFIRM=${MAINNET_CONFIRM_PHRASE}.`
   );
+}
+
+export type DeploymentArtifact = {
+  chainId: number;
+  contractName: "FreeTrialSubdomainRegistrarIdentity";
+  address: string;
+  deployTxHash: string;
+  constructorArgs: [string, string, string, string];
+  wrapper: string;
+  ensRegistry: string;
+  parentName: string;
+  parentNode: string;
+  compilerVersion: string;
+  optimizer: { enabled: boolean; runs: number };
+  deployedAt: string;
+};
+
+export async function writeReleaseArtifact(artifact: DeploymentArtifact): Promise<void> {
+  const outputPath = path.join(process.cwd(), RELEASE_ARTIFACT_PATH);
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
+  await fs.writeFile(outputPath, `${JSON.stringify(artifact, null, 2)}\n`, "utf8");
+}
+
+export async function readReleaseArtifact(): Promise<DeploymentArtifact> {
+  const raw = await fs.readFile(path.join(process.cwd(), RELEASE_ARTIFACT_PATH), "utf8");
+  return JSON.parse(raw) as DeploymentArtifact;
 }
 
 export type DeploymentManifest = {
@@ -31,24 +51,17 @@ export type DeploymentManifest = {
   constructorArgs: readonly string[];
   timestamp: string;
   buildProfile: string;
-  verification: {
-    command: string;
-    status: "pending" | "verified" | "failed";
-    verifiedAt?: string;
-    explorerUrl?: string;
-    notes?: string;
-  };
+  verification: { command: string; status: "pending" | "verified" | "failed"; notes?: string };
 };
 
+export function getManifestPath(networkName: string, contractAddress: string, contractName = "FreeTrialSubdomainRegistrar"): string {
+  return path.join(process.cwd(), "deployments", networkName, `${contractName}-${contractAddress.toLowerCase()}.json`);
+}
+
 export async function writeDeploymentManifest(manifest: DeploymentManifest): Promise<string> {
-  const outputDir = path.join(process.cwd(), "deployments", manifest.network);
-  await fs.mkdir(outputDir, { recursive: true });
-
-  const fileName = `${manifest.contractName}-${manifest.contractAddress.toLowerCase()}.json`;
-  const outputPath = path.join(outputDir, fileName);
-
+  const outputPath = getManifestPath(manifest.network, manifest.contractAddress, manifest.contractName);
+  await fs.mkdir(path.dirname(outputPath), { recursive: true });
   await fs.writeFile(outputPath, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
-
   return outputPath;
 }
 
@@ -64,13 +77,4 @@ export async function updateDeploymentManifest(
   const current = await readDeploymentManifest(manifestPath);
   const next = update(current);
   await fs.writeFile(manifestPath, `${JSON.stringify(next, null, 2)}\n`, "utf8");
-}
-
-export function getManifestPath(networkName: string, contractAddress: string, contractName = "FreeTrialSubdomainRegistrar"): string {
-  return path.join(
-    process.cwd(),
-    "deployments",
-    networkName,
-    `${contractName}-${contractAddress.toLowerCase()}.json`
-  );
 }

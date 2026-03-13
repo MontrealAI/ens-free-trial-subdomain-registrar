@@ -1,136 +1,66 @@
-import { ethers, network } from "hardhat";
+import { ethers } from "hardhat";
 
-import { readFlagValue, hasFlag } from "./utils/cli-flags";
-import { resolveParentNodeInput } from "./utils/parent-input";
-import { validateSingleLabelInput } from "./utils/label-input";
+import { hasFlag, readFlagValue } from "./utils/cli-flags";
 
-const MAINNET_CHAIN_ID = 1n;
-const DEFAULT_WRAPPER = "0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401";
+const CHAIN_ID = 1n;
+const WRAPPER = "0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401";
+const REGISTRY = "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e";
+const PARENT_NAME = "alpha.agent.agi.eth";
+const PARENT_NODE = "0xc74b6c5e8a0d97ed1fe28755da7d06a84593b4de92f6582327bc40f41d6c2d5e";
 const CANNOT_UNWRAP = 1n;
 
 const WRAPPER_ABI = [
-  "function getData(uint256 id) external view returns (address owner, uint32 fuses, uint64 expiry)",
-  "function allFusesBurned(bytes32 node, uint32 fuseMask) external view returns (bool)",
-  "function isApprovedForAll(address account, address operator) external view returns (bool)"
+  "function getData(uint256) view returns (address owner, uint32 fuses, uint64 expiry)",
+  "function allFusesBurned(bytes32,uint32) view returns (bool)",
+  "function canModifyName(bytes32,address) view returns (bool)"
 ];
 
-function requireAddress(name: string, value: string | undefined, ethersLib: { isAddress: (value: string) => boolean; isHexString?: (value: string) => boolean }): string {
-  if (!value || !ethersLib.isAddress(value)) {
-    throw new Error(`${name} must be set to a valid address.`);
-  }
-  return value;
-}
-
-function printUsage(): void {
-  console.log(`Usage:
-  npm run doctor:mainnet -- [--registrar 0x...] [--parent-name example.eth | --parent-node 0x...] [--label trialpass8]
-
-Read-only preflight checks for operators (no transactions are sent).
-
-Checks performed:
-  - connected network and chain id (must be mainnet)
-  - signer availability and ETH balance
-  - ENS NameWrapper code at ENS_NAME_WRAPPER (or default)
-  - registrar code and wrapper wiring (if registrar is provided)
-  - parent wrapping/lock/approval/activation (if parent + registrar are provided)
-  - label format guardrails (if --label is provided)`);
+function usage() {
+  console.log("Usage: npm run doctor:mainnet -- --registrar 0x... --label 12345678 --parent-name alpha.agent.agi.eth");
 }
 
 async function main() {
-  if (hasFlag(process.argv, "help")) {
-    printUsage();
-    return;
-  }
-
-    const provider = ethers.provider;
-  const chainId = (await provider.getNetwork()).chainId;
-
-  if (chainId !== MAINNET_CHAIN_ID) {
-    throw new Error(`This script is mainnet-only. Connected chainId=${chainId.toString()}.`);
-  }
+  if (hasFlag(process.argv, "help")) return usage();
+  const provider = ethers.provider;
+  const network = await provider.getNetwork();
+  if (network.chainId !== CHAIN_ID) throw new Error(`Mainnet only, found chainId=${network.chainId}`);
 
   const [signer] = await ethers.getSigners();
-  const signerAddress = await signer.getAddress();
-  const signerBalance = await provider.getBalance(signerAddress);
-  if (signerBalance === 0n) {
-    throw new Error(
-      "Signer has zero ETH balance. Doctor preflight failed because state-changing mainnet scripts require gas funds."
-    );
-  }
+  const balance = await provider.getBalance(signer.address);
+  const registrarAddress = readFlagValue(process.argv, "registrar") || process.env.REGISTRAR_ADDRESS;
+  const label = readFlagValue(process.argv, "label") || "12345678";
+  const parentName = readFlagValue(process.argv, "parent-name") || PARENT_NAME;
 
-  const wrapperAddress = requireAddress("ENS_NAME_WRAPPER", process.env.ENS_NAME_WRAPPER || DEFAULT_WRAPPER, ethers);
-  const wrapperCode = await provider.getCode(wrapperAddress);
-  if (wrapperCode === "0x") {
-    throw new Error(`ENS_NAME_WRAPPER=${wrapperAddress} has no contract bytecode on mainnet.`);
-  }
+  console.log(`chainId: ${network.chainId}`);
+  console.log(`rpc: connected`);
+  console.log(`deployer: ${signer.address}`);
+  console.log(`deployerBalanceEth: ${ethers.formatEther(balance)}`);
+  console.log(`wrapper: ${WRAPPER}`);
+  console.log(`registry: ${REGISTRY}`);
+  console.log(`parentName: ${parentName}`);
+  console.log(`parentNode: ${PARENT_NODE}`);
+  console.log(`namehashMatches: ${ethers.namehash(parentName).toLowerCase() === PARENT_NODE.toLowerCase()}`);
 
-  const registrarAddressInput = readFlagValue(process.argv, "registrar") || process.env.REGISTRAR_ADDRESS;
-  const registrarAddress = registrarAddressInput ? requireAddress("REGISTRAR_ADDRESS", registrarAddressInput, ethers) : undefined;
-  const parentNodeInput = readFlagValue(process.argv, "parent-node") || process.env.PARENT_NODE;
-  const parentNameInput = readFlagValue(process.argv, "parent-name") || process.env.PARENT_NAME;
-  const label = readFlagValue(process.argv, "label") || process.env.LABEL;
+  const wrapper = await ethers.getContractAt(WRAPPER_ABI, WRAPPER);
+  const [parentOwner] = await wrapper.getData(PARENT_NODE);
+  const parentLocked = await wrapper.allFusesBurned(PARENT_NODE, CANNOT_UNWRAP);
+  console.log(`parentWrappedOwner: ${parentOwner}`);
+  console.log(`parentLocked: ${parentLocked}`);
 
-  console.log(`Network: ${network.name}`);
-  console.log(`Chain ID: ${chainId.toString()}`);
-  console.log(`Signer: ${signerAddress}`);
-  console.log(`Signer ETH balance: ${ethers.formatEther(signerBalance)} ETH`);
-  console.log(`ENS NameWrapper: ${wrapperAddress}`);
+  if (!registrarAddress) return console.log("registrar: not provided, skipping registrar checks");
 
-  if (label) {
-    validateSingleLabelInput(label, parentNameInput);
-    console.log(`Label preflight: ${label} (valid single first-degree label)`);
-  }
-
-  if (!registrarAddress) {
-    console.log("Registrar check skipped: provide --registrar or REGISTRAR_ADDRESS to run registrar/parent checks.");
-    return;
-  }
-
-  const registrarCode = await provider.getCode(registrarAddress);
-  if (registrarCode === "0x") {
-    throw new Error(`REGISTRAR_ADDRESS=${registrarAddress} has no contract bytecode on mainnet.`);
-  }
-
-  const registrar = await ethers.getContractAt("FreeTrialSubdomainRegistrar", registrarAddress, signer);
-  const configuredWrapper = await registrar.wrapper();
-  if (configuredWrapper.toLowerCase() !== wrapperAddress.toLowerCase()) {
-    throw new Error(
-      `Registrar wrapper mismatch: registrar points to ${configuredWrapper} but ENS_NAME_WRAPPER is ${wrapperAddress}.`
-    );
-  }
-
-  console.log(`Registrar: ${registrarAddress}`);
-  console.log("Registrar wrapper wiring: OK");
-
-  if (!parentNodeInput && !parentNameInput) {
-    console.log("Parent checks skipped: provide --parent-name/--parent-node (or PARENT_NAME/PARENT_NODE) for parent preflight.");
-    return;
-  }
-
-  const { parentNode, normalizedParentName } = resolveParentNodeInput(ethers, parentNodeInput, parentNameInput);
-  const wrapper = await ethers.getContractAt(WRAPPER_ABI, wrapperAddress, signer);
-  const [parentOwner] = await wrapper.getData(parentNode);
-  if (parentOwner === ethers.ZeroAddress) {
-    throw new Error(`Parent ${parentNode} appears unwrapped or empty in NameWrapper.getData.`);
-  }
-
-  const parentLocked = await wrapper.allFusesBurned(parentNode, CANNOT_UNWRAP);
-  const approved = await wrapper.isApprovedForAll(parentOwner, registrarAddress);
-  const parentActive = await registrar.activeParents(parentNode);
-
-  console.log(`Parent node: ${parentNode}`);
-  if (normalizedParentName) console.log(`Parent name: ${normalizedParentName}`);
-  console.log(`Wrapped parent owner: ${parentOwner}`);
-  console.log(`Parent locked: ${parentLocked}`);
-  console.log(`Registrar approved in NameWrapper: ${approved}`);
-  console.log(`Parent active in registrar: ${parentActive}`);
-
-  if (parentActive) {
-    const nextExpiry = await registrar.nextExpiry(parentNode);
-    console.log(`Next trial expiry preview: ${nextExpiry.toString()} (${new Date(Number(nextExpiry) * 1000).toISOString()})`);
-  }
-
-  console.log("Doctor preflight complete (read-only). No transactions were sent.");
+  const registrar = await ethers.getContractAt("FreeTrialSubdomainRegistrarIdentity", registrarAddress);
+  console.log(`registrar: ${registrarAddress}`);
+  console.log(`registrarCanModifyParent: ${await wrapper.canModifyName(PARENT_NODE, registrarAddress)}`);
+  console.log(`paused: ${await registrar.paused()}`);
+  console.log(`rootActive: ${await registrar.rootActive()}`);
+  console.log(`labelValid: ${await registrar.validateLabel(label)}`);
+  const preview = await registrar.preview(label);
+  console.log(`preview.fullName: ${preview[0]}`);
+  console.log(`preview.node: ${preview[1]}`);
+  console.log(`preview.expectedExpiry: ${preview[3]}`);
+  console.log(`preview.available: ${preview[4]}`);
+  console.log(`available: ${await registrar.available(label)}`);
 }
 
 main().catch((error) => {

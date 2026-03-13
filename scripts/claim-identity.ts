@@ -7,10 +7,10 @@ const MAINNET_CHAIN_ID = 1n;
 
 function printUsage(): void {
   console.log(`Usage:
-  npm run claim:mainnet -- --identity 0x... --node 0x... --confirm-mainnet I_UNDERSTAND_MAINNET
+  npm run claim:mainnet -- --identity 0x... --label 12345678 --confirm-mainnet I_UNDERSTAND_MAINNET
 
 Notes:
-- --node must be a namehash (bytes32).
+- --label is a single label (first-degree) under alpha.agent.agi.eth.
 - Caller must be wrapped name owner or transaction will revert.`);
 }
 
@@ -21,9 +21,9 @@ function requireAddress(name: string, value: string | undefined): string {
   return value;
 }
 
-function requireBytes32(name: string, value: string | undefined): string {
-  if (!value || !ethers.isHexString(value, 32)) {
-    throw new Error(`${name} must be a 32-byte hex value.`);
+function requireLabel(value: string | undefined): string {
+  if (!value) {
+    throw new Error("--label is required.");
   }
   return value;
 }
@@ -34,6 +34,10 @@ async function main() {
     return;
   }
 
+  if (hasFlag(process.argv, "node") || process.env.NODE) {
+    throw new Error("--node is no longer supported. Use --label <single-label> instead.");
+  }
+
   requireMainnetBroadcastConfirmation(process.argv, "broadcast an identity claim transaction");
 
   const chainId = (await ethers.provider.getNetwork()).chainId;
@@ -42,7 +46,7 @@ async function main() {
   }
 
   const identityAddress = requireAddress("IDENTITY_ADDRESS", readFlagValue(process.argv, "identity") || process.env.IDENTITY_ADDRESS);
-  const node = requireBytes32("NODE", readFlagValue(process.argv, "node") || process.env.NODE);
+  const label = requireLabel(readFlagValue(process.argv, "label") || process.env.LABEL);
 
   const code = await ethers.provider.getCode(identityAddress);
   if (code === "0x") {
@@ -62,14 +66,18 @@ async function main() {
   console.log(`Chain ID: ${chainId.toString()}`);
   console.log(`Identity contract: ${identityAddress}`);
   console.log(`Caller: ${signerAddress}`);
-  console.log(`Node: ${node}`);
+  console.log(`Label: ${label}`);
 
-  const tx = await identity.claimIdentity(node);
+  const tx = await identity.claimIdentity(label);
   const receipt = await tx.wait();
+
+  const preview = await identity.preview(label);
 
   console.log("Done.");
   console.log(`Transaction hash: ${receipt?.hash ?? tx.hash}`);
-  console.log(`Claimed tokenId: ${BigInt(node).toString()}`);
+  console.log(`Claimed tokenId: ${preview[2].toString()}`);
+  console.log(`Claimed node: ${preview[1]}`);
+  console.log(`Claimed full name: ${preview[0]}`);
 }
 
 main().catch((error) => {
