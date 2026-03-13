@@ -18,7 +18,9 @@
     "doctor:mainnet": "hardhat run scripts/mainnet-doctor.ts --network mainnet",
     "setup:parent:mainnet": "hardhat run scripts/approve-and-setup-parent.ts --network mainnet",
     "register:mainnet": "hardhat run scripts/register-subname.ts --network mainnet",
-    "ci": "npm run build && npm test && npm run typecheck"
+    "ci": "npm run build && npm test && npm run typecheck",
+    "claim:mainnet": "hardhat run scripts/claim-identity.ts --network mainnet",
+    "sync:mainnet": "hardhat run scripts/sync-identity.ts --network mainnet"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",

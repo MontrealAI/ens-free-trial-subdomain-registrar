@@ -55,3 +55,10 @@ npm run verify:mainnet -- --address 0xYourRegistrar
 - 30-day max child expiry capped by effective parent expiry.
 - Root-scoped claim/sync only for `*.alpha.agent.agi.eth`.
 - Soulbound forever (approvals/transfers revert, EIP-5192 `Locked` emitted on mint).
+
+
+## Identity maintenance helpers
+```bash
+npm run claim:mainnet -- --identity 0xYourRegistrar --label 12345678 --confirm-mainnet I_UNDERSTAND_MAINNET
+npm run sync:mainnet -- --identity 0xYourRegistrar --token-id 123 --confirm-mainnet I_UNDERSTAND_MAINNET
+```
