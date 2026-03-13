@@ -132,7 +132,7 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, ReentrancyGuard, IERC519
             _burn(tokenId);
         }
 
-        _safeMint(wrappedOwner, tokenId);
+        _mint(wrappedOwner, tokenId);
         emit IdentityClaimed(node, wrappedOwner);
     }
 
@@ -240,7 +240,7 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, ReentrancyGuard, IERC519
 
     function _mintOrReconcile(uint256 tokenId, address wrappedOwner) internal {
         if (!_exists(tokenId)) {
-            _safeMint(wrappedOwner, tokenId);
+            _mint(wrappedOwner, tokenId);
             return;
         }
 
@@ -248,7 +248,7 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, ReentrancyGuard, IERC519
         if (current == wrappedOwner) return;
 
         _burn(tokenId);
-        _safeMint(wrappedOwner, tokenId);
+        _mint(wrappedOwner, tokenId);
     }
 
     function _trialExpiry(bytes32 parentNode) internal view returns (uint64) {

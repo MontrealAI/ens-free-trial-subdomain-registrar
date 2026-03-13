@@ -18,6 +18,9 @@ describe("FreeTrialSubdomainRegistrarIdentity", function () {
     ]);
     await identity.waitForDeployment();
 
+    const contractOwner = await ethers.deployContract("MockIdentityCaller");
+    await contractOwner.waitForDeployment();
+
     const parentNode = ethers.namehash("example.eth");
     const latest = await ethers.provider.getBlock("latest");
     const now = BigInt(latest!.timestamp);
@@ -27,7 +30,7 @@ describe("FreeTrialSubdomainRegistrarIdentity", function () {
     await wrapper.setCanModify(parentNode, deployer.address, true);
     await identity.setupDomain(parentNode, true);
 
-    return { deployer, user, other, wrapper, identity: identity as any, parentNode };
+    return { deployer, user, other, wrapper, identity: identity as any, parentNode, contractOwner: contractOwner as any };
   }
 
   it("registers wrapped subname and mints identity atomically", async function () {
@@ -82,6 +85,30 @@ describe("FreeTrialSubdomainRegistrarIdentity", function () {
 
     await identity.syncIdentity(tokenId);
     await expect(identity.ownerOf(tokenId)).to.be.reverted;
+  });
+
+
+  it("allows registerIdentity when wrapped/identity owner is a contract without ERC721Receiver", async function () {
+    const { identity, parentNode, contractOwner } = await fixture();
+    await identity.registerIdentity(parentNode, "contract8", await contractOwner.getAddress());
+
+    const node = ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("contract8"))]));
+    const tokenId = BigInt(node);
+
+    expect(await identity.ownerOf(tokenId)).to.equal(await contractOwner.getAddress());
+  });
+
+  it("allows claimIdentity when wrapped owner is a contract without ERC721Receiver", async function () {
+    const { identity, wrapper, parentNode, contractOwner } = await fixture();
+    const ownerAddress = await contractOwner.getAddress();
+    const node = ethers.keccak256(ethers.solidityPacked(["bytes32", "bytes32"], [parentNode, ethers.keccak256(ethers.toUtf8Bytes("claimsafe"))]));
+
+    const latest = await ethers.provider.getBlock("latest");
+    const now = BigInt(latest!.timestamp);
+    await wrapper.setNameData(node, ownerAddress, Number(CANNOT_UNWRAP), Number(now + THIRTY_DAYS), true);
+
+    await contractOwner.claim(await identity.getAddress(), node);
+    expect(await identity.ownerOf(BigInt(node))).to.equal(ownerAddress);
   });
 
   it("tokenURI is fully onchain json", async function () {

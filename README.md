@@ -54,13 +54,13 @@ npm run typecheck
 ## Mainnet commands
 
 ```bash
-# Deploy identity (default)
+# Deploy identity (explicit mode)
 npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --contract identity
 
 # Verify identity
 npm run verify:mainnet -- --address 0xYourIdentityAddress --contract identity
 
-# Deploy/verify legacy registrar explicitly
+# Deploy/verify legacy registrar (script default mode is legacy)
 npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --contract legacy
 npm run verify:mainnet -- --address 0xYourRegistrarAddress --contract legacy
 ```

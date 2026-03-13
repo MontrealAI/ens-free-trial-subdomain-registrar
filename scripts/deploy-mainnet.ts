@@ -21,7 +21,7 @@ function requireAddress(name: string, value: string, ethersLib: { isAddress: (va
 
 function resolveContractKind(): ContractKind {
   const flagIndex = process.argv.findIndex((arg) => arg === "--contract");
-  if (flagIndex === -1) return "identity";
+  if (flagIndex === -1) return "legacy";
   const value = process.argv[flagIndex + 1];
   if (value === "legacy" || value === "identity") return value;
   throw new Error("--contract must be either 'identity' or 'legacy'.");
@@ -36,7 +36,7 @@ Optional:
   ENS_REGISTRY=0x... (used by identity contract; defaults to ENS registry)
   MAINNET_CONFIRM=I_UNDERSTAND_MAINNET (env alternative to --confirm-mainnet)
 
-Default contract mode is identity.`);
+Default contract mode is legacy.`);
 }
 
 async function main() {

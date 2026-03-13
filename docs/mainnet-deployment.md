@@ -23,11 +23,11 @@ Mainnet constants:
 ## Canonical commands
 
 ```bash
-# identity (default)
+# identity (explicit mode)
 npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --contract identity
 npm run verify:mainnet -- --address 0xYourIdentityAddress --contract identity
 
-# legacy registrar (explicit)
+# legacy registrar (default deploy mode)
 npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --contract legacy
 npm run verify:mainnet -- --address 0xYourRegistrarAddress --contract legacy
 ```
