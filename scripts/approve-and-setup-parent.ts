@@ -36,7 +36,10 @@ async function main() {
   const wrapper = await ethers.getContractAt(WRAPPER_ABI, WRAPPER, signer);
   const registrar = await ethers.getContractAt("FreeTrialSubdomainRegistrarIdentity", registrarAddress, signer);
 
-  const [parentOwner] = await wrapper.getData(ROOT_NODE);
+  const [parentOwner] = await wrapper.getData(ROOT_NODE).catch(() => [ethers.ZeroAddress]);
+  if (parentOwner === ethers.ZeroAddress) {
+    throw new Error("Wrapped root not found on NameWrapper. Ensure alpha.agent.agi.eth is wrapped before setup.");
+  }
   const locked = await wrapper.allFusesBurned(ROOT_NODE, CANNOT_UNWRAP);
   const approved = await wrapper.isApprovedForAll(parentOwner, registrarAddress);
   const canModify = await wrapper.canModifyName(ROOT_NODE, registrarAddress);
