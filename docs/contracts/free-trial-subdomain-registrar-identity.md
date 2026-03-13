@@ -32,5 +32,14 @@ One transaction:
 - `data:application/json;base64,...`
 - includes base64 SVG image payload.
 
+## Implementation provenance
+- Canonical production source: `contracts/FreeTrialSubdomainRegistrarIdentity.sol`.
+- If handoff/source variants exist (for example `*_noIR_*` filenames), treat this canonical path as the repository source of truth for build, test, deployment, and verification.
+
+## Bytecode size discipline
+- Compiler target: solc `0.8.24`, optimizer enabled, runs `200`, viaIR `false`.
+- The identity contract is intentionally kept below the EIP-170 deployed code size cap (`24,576` bytes).
+- CI coverage includes a bytecode-budget test to prevent accidental size regressions.
+
 ## Deployment status honesty
 As of this repository state, `FreeTrialSubdomainRegistrarIdentity` is integrated and tested locally, but no new mainnet deployment record is declared here yet.

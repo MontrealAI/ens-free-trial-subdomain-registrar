@@ -27,6 +27,7 @@ Production ENS tooling now centered on **FreeTrialSubdomainRegistrarIdentity**, 
 - Onchain SVG + onchain JSON metadata.
 - `claimIdentity` for backfill/migration.
 - Permissionless `syncIdentity` for expiry/desync burn.
+- Bytecode-budget regression test for EIP-170 deployment safety margin.
 
 ## Invariants
 - Registration remains free.

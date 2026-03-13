@@ -8,7 +8,7 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 
 ### Added
 - Added flagship contract `FreeTrialSubdomainRegistrarIdentity` for atomic wrapped subname + soulbound ENS identity minting.
-- Added identity-specific tests covering atomic minting, soulbound enforcement, claim, sync burn, and onchain tokenURI format.
+- Added identity-specific tests covering atomic minting, soulbound enforcement, claim, sync burn, onchain tokenURI format, and EIP-170 bytecode budget checks.
 - Added identity contract documentation at `docs/contracts/free-trial-subdomain-registrar-identity.md`.
 - Added draft next-major release notes at `docs/releases/v2.0.0-draft.md`.
 
