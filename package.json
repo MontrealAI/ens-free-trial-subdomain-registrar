@@ -8,19 +8,17 @@
     "npm": ">=10"
   },
   "scripts": {
+    "clean": "hardhat clean",
     "build": "hardhat compile",
-    "build:production": "hardhat compile",
     "test": "hardhat test",
     "typecheck": "tsc --noEmit",
-    "clean": "hardhat clean",
+    "ci": "npm run build && npm test && npm run typecheck",
     "deploy:mainnet": "node scripts/run-mainnet.js scripts/deploy-mainnet.ts",
     "verify:mainnet": "node scripts/run-mainnet.js scripts/verify-mainnet.ts",
     "doctor:mainnet": "node scripts/run-mainnet.js scripts/mainnet-doctor.ts",
     "setup:parent:mainnet": "node scripts/run-mainnet.js scripts/approve-and-setup-parent.ts",
     "register:mainnet": "node scripts/run-mainnet.js scripts/register-subname.ts",
-    "ci": "npm run build && npm test && npm run typecheck",
-    "claim:mainnet": "node scripts/run-mainnet.js scripts/claim-identity.ts",
-    "sync:mainnet": "node scripts/run-mainnet.js scripts/sync-identity.ts"
+    "build:production": "hardhat compile"
   },
   "devDependencies": {
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",

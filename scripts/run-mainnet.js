@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 const { spawnSync } = require('node:child_process');
+require('dotenv').config();
 
 const target = process.argv[2];
 if (!target) {
@@ -7,25 +8,16 @@ if (!target) {
   process.exit(1);
 }
 
-const env = { ...process.env };
-const extra = process.argv.slice(3);
-for (let i = 0; i < extra.length; i++) {
-  const arg = extra[i];
-  if (!arg.startsWith('--')) continue;
-  const key = `npm_config_${arg.slice(2).replace(/-/g, '_')}`;
-  const next = extra[i + 1];
-  if (next && !next.startsWith('--')) {
-    env[key] = next;
-    i++;
-  } else {
-    env[key] = 'true';
-  }
+if (!process.env.MAINNET_RPC_URL || process.env.MAINNET_RPC_URL.trim() === '') {
+  console.error('Missing MAINNET_RPC_URL. Set MAINNET_RPC_URL in your environment or .env before running mainnet scripts.');
+  process.exit(1);
 }
 
+const extra = process.argv.slice(3);
 const result = spawnSync(
   process.platform === 'win32' ? 'npx.cmd' : 'npx',
-  ['hardhat', 'run', target, '--network', 'mainnet'],
-  { stdio: 'inherit', env }
+  ['hardhat', 'run', target, '--network', 'mainnet', '--', ...extra],
+  { stdio: 'inherit', env: { ...process.env } }
 );
 
 process.exit(result.status ?? 1);

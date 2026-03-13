@@ -4,11 +4,11 @@ This repository is production-scoped for `*.alpha.agent.agi.eth` using one contr
 - `FreeTrialSubdomainRegistrarIdentity`
 
 ## User flow
-1. Operator activates root after ENS prerequisites are met.
-2. User calls `register(label)`.
-3. Contract creates wrapped subname and mints soulbound identity NFT to caller.
-4. If token/NW state diverges, anyone may call `syncIdentity`.
-5. Legit owner can call `claimIdentity(label)` for stale/missing token recovery.
+1. Operator verifies readiness with `doctor:mainnet`.
+2. Operator activates root after ENS prerequisites are met.
+3. User calls `register(label)` to register wrapped subname and mint SBT to self.
+4. If token/wrapper state diverges, anyone may call `syncIdentity` for lazy cleanup.
+5. Wrapped owner may call `claimIdentity(label)` for stale/missing token recovery.
 
 ## Operational guarantees
 - Free registration (gas only).

@@ -34,8 +34,6 @@ npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --verify
 npm run verify:mainnet -- --address 0xYourRegistrar
 npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate --approve-operator
 npm run register:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --label 12345678
-npm run claim:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --label 12345678
-npm run sync:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --label 12345678
 ```
 
 ## Required ENS prerequisites (manual)
