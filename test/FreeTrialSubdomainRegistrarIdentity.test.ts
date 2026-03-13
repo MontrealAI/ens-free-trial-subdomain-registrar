@@ -108,6 +108,12 @@ describe("FreeTrialSubdomainRegistrarIdentity", function () {
     const { registrar } = await deployFixture();
     await expect(registrar.syncIdentity(123n)).to.be.revertedWithCustomError(registrar, "NonexistentToken");
   });
+
+  it("reverts syncIdentityByLabel for invalid label input", async function () {
+    const { registrar } = await deployFixture();
+    await expect(registrar.syncIdentityByLabel("bad.label")).to.be.revertedWithCustomError(registrar, "InvalidLabel");
+  });
+
   it("supports re-registration after expiry and refreshes token data", async function () {
     const { registrar, wrapper, alice, bob } = await deployFixture();
     await registrar.setRootActive(true);

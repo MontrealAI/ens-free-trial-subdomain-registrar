@@ -191,7 +191,7 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
     }
 
     function syncIdentityByLabel(string calldata label) external returns (bool burned) {
-        if (!_isValidLabel(label)) return false;
+        if (!_isValidLabel(label)) revert InvalidLabel();
         burned = _syncIdentity(uint256(_nodeForLabel(label)));
     }
 
