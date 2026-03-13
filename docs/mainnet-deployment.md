@@ -42,3 +42,12 @@ npm run sync:mainnet -- --identity 0xYourIdentityAddress --token-id 123 --confir
 - Registration remains free.
 - Label rules remain single-label lowercase alphanumeric, 8–63 chars.
 - No mainnet deployment claim is made for identity contract until real deployment metadata exists.
+
+## Pending identity deployment checklist
+
+Before declaring identity as live, record all of:
+- deployed address, deployment transaction hash, and block number
+- verified explorer URL
+- constructor args (`wrapper`)
+- release-asset manifest update
+- README + release notes update
