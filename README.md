@@ -4,35 +4,43 @@
 [![Latest release](https://img.shields.io/github/v/release/MontrealAI/ens-free-trial-subdomain-registrar?display_name=tag)](https://github.com/MontrealAI/ens-free-trial-subdomain-registrar/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 [![Node.js 20.19.6](https://img.shields.io/badge/node-20.19.6-339933.svg)](https://nodejs.org/)
-[![Live on Ethereum Mainnet](https://img.shields.io/badge/mainnet-live-3C3C3D.svg)](https://etherscan.io/address/0x7aAE649184182A01Ac7D8D5d7873903015C08761#code)
+[![Mainnet live (legacy registrar v1.0.0)](https://img.shields.io/badge/mainnet-live%20legacy%20registrar-3C3C3D.svg)](https://etherscan.io/address/0x7aAE649184182A01Ac7D8D5d7873903015C08761#code)
 
-Production-focused ENS subname registrar for **free, non-renewable 30-day wrapped trials**.
+Production ENS tooling now centered on **FreeTrialSubdomainRegistrarIdentity**, a universal ENS-based identity primitive that atomically creates a wrapped subname and soulbound identity NFT (`tokenId = uint256(node)`).
 
-## Live mainnet deployment
+## What is live today vs next release
 
-- **Contract:** `FreeTrialSubdomainRegistrar`
-- **Address:** [`0x7aAE649184182A01Ac7D8D5d7873903015C08761`](https://etherscan.io/address/0x7aAE649184182A01Ac7D8D5d7873903015C08761#code)
-- **Deployment tx:** [`0x70a17265c9f3bc142b5b1c660f32439084672bf60e21a5d20e1dd233f4f39e0a`](https://etherscan.io/tx/0x70a17265c9f3bc142b5b1c660f32439084672bf60e21a5d20e1dd233f4f39e0a)
-- **Parent activation tx:** [`0xddaa35a801612edd7dba3086e1740fb0c945d1eb1cc0c06f6b2ab78e713f6205`](https://etherscan.io/tx/0xddaa35a801612edd7dba3086e1740fb0c945d1eb1cc0c06f6b2ab78e713f6205)
-- **Mainnet deployment guide:** [`docs/mainnet-deployment.md`](docs/mainnet-deployment.md)
-- **Latest release notes:** [`CHANGELOG.md`](CHANGELOG.md)
+### Current live release (v1.0.0)
+- Contract: `FreeTrialSubdomainRegistrar`
+- Address: `0x7aAE649184182A01Ac7D8D5d7873903015C08761`
+- Verified: https://etherscan.io/address/0x7aAE649184182A01Ac7D8D5d7873903015C08761#code
 
-## Core behavior (invariants)
+### Next flagship release (deployment pending)
+- Contract: `FreeTrialSubdomainRegistrarIdentity`
+- Status: integrated in this repository, **not yet deployed to mainnet in this repo**
+- Canonical contract source: `contracts/FreeTrialSubdomainRegistrarIdentity.sol`
 
-- Registration is free.
-- Child expiry is always `min(block.timestamp + 30 days, parent effective expiry)`.
-- Child receives no grace period of its own.
-- For `.eth` parents, grace only impacts parent effective expiry cap and never extends child trial beyond 30 days.
-- Child owner is never granted `CAN_EXTEND_EXPIRY` and cannot self-renew through this system.
-- Labels are strict: lowercase alphanumeric only, length 8–63, single-label input only (no dotted labels/full names).
+## Identity primitive highlights
+- Atomic wrapped subname registration + identity mint.
+- Soulbound NFT (`transferFrom`, `safeTransferFrom`, approvals revert).
+- EIP-5192 `locked()` compatibility.
+- Onchain SVG + onchain JSON metadata.
+- `claimIdentity` for backfill/migration.
+- Permissionless `syncIdentity` for expiry/desync burn.
 
-## Main docs
+## Invariants
+- Registration remains free.
+- Trial expiry is `min(block.timestamp + 30 days, parent effective expiry)`.
+- No child grace period; no child self-renew path.
+- Labels are single-label lowercase alphanumeric only, 8–63 chars.
+- Dotted labels/full names as labels are rejected.
 
-- **Mainnet deployment + activation details:** [`docs/mainnet-deployment.md`](docs/mainnet-deployment.md)
-- **Flagship operator walkthrough (`alpha.agent.agi.eth`):** [`docs/use-cases/alpha-agent-agi-eth.md`](docs/use-cases/alpha-agent-agi-eth.md)
-- **Etherscan no-CLI walkthrough:** [`docs/etherscan-web-guide.md`](docs/etherscan-web-guide.md)
-- **Release workflow:** [`docs/release-process.md`](docs/release-process.md)
-- **Security policy:** [`SECURITY.md`](SECURITY.md)
+## Docs
+- Mainnet deployment status and runbook: [`docs/mainnet-deployment.md`](docs/mainnet-deployment.md)
+- Identity flagship contract doc: [`docs/contracts/free-trial-subdomain-registrar-identity.md`](docs/contracts/free-trial-subdomain-registrar-identity.md)
+- Legacy registrar release notes: [`docs/releases/v1.0.0.md`](docs/releases/v1.0.0.md)
+- Next release draft notes: [`docs/releases/v2.0.0-draft.md`](docs/releases/v2.0.0-draft.md)
+- Flagship operator walkthrough (`alpha.agent.agi.eth`): [`docs/use-cases/alpha-agent-agi-eth.md`](docs/use-cases/alpha-agent-agi-eth.md)
 
 ## Install and validate
 
@@ -43,38 +51,14 @@ npm test
 npm run typecheck
 ```
 
-Node.js runtime is pinned to **20.19.6** via `.nvmrc` and `.node-version`.
-
 ## Mainnet commands
 
 ```bash
-# 1) deploy (requires explicit mainnet confirmation)
+# Deploy/verify legacy registrar (default operator-safe mode)
 npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
-
-# 2) verify (use the address printed by deploy step)
 npm run verify:mainnet -- --address 0xYourRegistrarAddress
 
-# 3) setup parent (requires REGISTRAR_ADDRESS + mainnet confirmation)
-REGISTRAR_ADDRESS=0xYourRegistrarAddress \
-PARENT_NAME=alpha.agent.agi.eth \
-npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate
-
-# 4) registration helpers
-npm run register:mainnet -- --help
-npm run doctor:mainnet -- --help
+# Deploy/verify identity explicitly
+npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --contract identity
+npm run verify:mainnet -- --address 0xYourIdentityAddress --contract identity
 ```
-
-## Flagship example
-
-This repository remains generic; the following is a real production example:
-
-- Parent: `alpha.agent.agi.eth`
-- Parent node: `0xc74b6c5e8a0d97ed1fe28755da7d06a84593b4de92f6582327bc40f41d6c2d5e`
-- `LABEL=12345678` => `12345678.alpha.agent.agi.eth`
-- `LABEL=ethereum` => `ethereum.alpha.agent.agi.eth`
-
-## Releases
-
-- Tags follow semantic versioning (`vMAJOR.MINOR.PATCH`).
-- First stable mainnet release target: **`v1.0.0`**.
-- See [`docs/release-process.md`](docs/release-process.md) for the exact maintainer checklist and `gh release` command.
