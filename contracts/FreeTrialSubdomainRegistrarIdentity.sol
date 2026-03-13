@@ -379,7 +379,7 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
             effectiveExpiry = expiry - PARENT_GRACE_PERIOD;
         }
 
-        usable = effectiveExpiry > block.timestamp;
+        usable = effectiveExpiry > block.timestamp && parentLockedOut && registrarAuthorisedOut;
     }
 
     function _wrappedState(bytes32 node) internal view returns (address owner, uint32 fuses, uint64 expiry) {
@@ -429,8 +429,8 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
         out = string.concat(out, ',"labelhash":"', Strings.toHexString(uint256(data.labelhash), 32), '"');
         out = string.concat(out, ',"token_owner":"', Strings.toHexString(ownerOf(tokenId)), '"');
         (address wrappedOwner, , uint64 expiry) = _wrappedState(bytes32(tokenId));
-        out = string.concat(out, ',\"wrapped_owner\":\"', Strings.toHexString(wrappedOwner), '\"');
-        out = string.concat(out, ',\"resolver\":\"', Strings.toHexString(ensRegistry.resolver(bytes32(tokenId))), '\"');
+        out = string.concat(out, ',"wrapped_owner":"', Strings.toHexString(wrappedOwner), '"');
+        out = string.concat(out, ',"resolver":"', Strings.toHexString(ensRegistry.resolver(bytes32(tokenId))), '"');
         out = string.concat(out, ',"expiry_unix":', uint256(expiry).toString());
         out = string.concat(out, ',"minted_at_unix":', uint256(data.mintedAt).toString());
         out = string.concat(out, ',"source":"onchain","ui_hint":"alpha-agent-identity"}');

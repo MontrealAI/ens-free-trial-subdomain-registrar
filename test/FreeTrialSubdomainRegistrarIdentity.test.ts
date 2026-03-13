@@ -134,9 +134,20 @@ describe("FreeTrialSubdomainRegistrarIdentity", function () {
     const tokenId = BigInt(nodeFor("12345678"));
     const uri = await registrar.tokenURI(tokenId);
     const payload = Buffer.from(uri.replace("data:application/json;base64,", ""), "base64").toString("utf8");
+    const parsed = JSON.parse(payload);
+    expect(parsed.extension.wrapped_owner).to.be.a("string");
+    expect(parsed.extension.resolver).to.be.a("string");
     expect(payload).to.contain('"name":"12345678.alpha.agent.agi.eth"');
     expect(payload).to.contain('"parent_name":"alpha.agent.agi.eth"');
     expect(payload).to.contain('"status"');
+  });
+
+  it("preview marks parent unusable when registrar is not authorized", async function () {
+    const { registrar, wrapper } = await deployFixture();
+    await wrapper.setCanModify(ROOT_NODE, await registrar.getAddress(), false);
+    const preview = await registrar.preview("12345678");
+    expect(preview.status).to.equal(6n);
+    expect(preview.expectedNewExpiry).to.equal(0n);
   });
 
   it("preview is non-reverting for valid/invalid/unavailable states", async function () {
