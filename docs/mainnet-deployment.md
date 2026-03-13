@@ -48,6 +48,14 @@ parentNode = 0xc74b6c5e8a0d97ed1fe28755da7d06a84593b4de92f6582327bc40f41d6c2d5e
 
 ## Canonical reproducible commands
 
+If you are doing a fresh deployment, use your newly deployed registrar address for steps 2-4.
+
+```bash
+REGISTRAR_ADDRESS=0xYourNewlyDeployedRegistrarAddress
+```
+
+You can export this from your shell (or set it in `.env`) after step 1.
+
 ### 1) Deploy
 
 ```bash
@@ -57,20 +65,20 @@ npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
 ### 2) Verify
 
 ```bash
-npm run verify:mainnet -- --address 0x7aAE649184182A01Ac7D8D5d7873903015C08761
+npm run verify:mainnet -- --address "$REGISTRAR_ADDRESS"
 ```
 
 ### 3) Approve + activate parent
 
 ```bash
-REGISTRAR_ADDRESS=0x7aAE649184182A01Ac7D8D5d7873903015C08761 PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate
+REGISTRAR_ADDRESS="$REGISTRAR_ADDRESS" PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate
 ```
 
 ### 4) Register example subname
 
 ```bash
 npm run register:mainnet -- \
-  --registrar 0x7aAE649184182A01Ac7D8D5d7873903015C08761 \
+  --registrar "$REGISTRAR_ADDRESS" \
   --parent-name alpha.agent.agi.eth \
   --label 12345678 \
   --owner 0xRecipientAddress \
@@ -85,6 +93,9 @@ Use one of:
 
 ```bash
 npm run doctor:mainnet -- --registrar 0x7aAE649184182A01Ac7D8D5d7873903015C08761 --parent-name alpha.agent.agi.eth --label 12345678
+
+# or against your own fresh deployment
+npm run doctor:mainnet -- --registrar "$REGISTRAR_ADDRESS" --parent-name alpha.agent.agi.eth --label 12345678
 ```
 
 - Onchain read calls:
@@ -96,13 +107,13 @@ npm run doctor:mainnet -- --registrar 0x7aAE649184182A01Ac7D8D5d7873903015C08761
 Stop new minting immediately:
 
 ```bash
-REGISTRAR_ADDRESS=0x7aAE649184182A01Ac7D8D5d7873903015C08761 PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action deactivate
+REGISTRAR_ADDRESS="$REGISTRAR_ADDRESS" PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action deactivate
 ```
 
 Or remove registrar state for that parent:
 
 ```bash
-REGISTRAR_ADDRESS=0x7aAE649184182A01Ac7D8D5d7873903015C08761 PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action remove
+REGISTRAR_ADDRESS="$REGISTRAR_ADDRESS" PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action remove
 ```
 
 These actions stop **new** free trial registrations. Previously minted names remain valid until their individual expiry.
