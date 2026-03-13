@@ -1,5 +1,5 @@
 import { expect } from "chai";
-import { ethers } from "hardhat";
+import { artifacts, ethers } from "hardhat";
 
 const CANNOT_UNWRAP = 1n;
 const IS_DOT_ETH = 1n << 17n;
@@ -33,6 +33,13 @@ describe("FreeTrialSubdomainRegistrarIdentity", function () {
     const info = await registrar.rootInfo();
     expect(info[0]).to.eq(ROOT_NAME);
     expect(info[1]).to.eq(ROOT_NODE);
+  });
+
+
+  it("keeps runtime bytecode under EIP-170 limit", async function () {
+    const artifact = await artifacts.readArtifact("FreeTrialSubdomainRegistrarIdentity");
+    const runtimeSize = (artifact.deployedBytecode.length - 2) / 2;
+    expect(runtimeSize).to.be.lessThan(24576);
   });
 
   it("validates labels", async function () {
