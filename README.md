@@ -48,12 +48,14 @@ Node.js runtime is pinned to **20.19.6** via `.nvmrc` and `.node-version`.
 ## Mainnet commands
 
 ```bash
-npm run deploy:mainnet
+MAINNET_CONFIRM=I_UNDERSTAND_MAINNET npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
 npm run verify:mainnet -- --address 0x...
-npm run setup:parent:mainnet
+REGISTRAR_ADDRESS=0xYourRegistrarAddress MAINNET_CONFIRM=I_UNDERSTAND_MAINNET npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate
 npm run register:mainnet -- --help
 npm run doctor:mainnet -- --help
 ```
+
+`deploy:mainnet`, `setup:parent:mainnet`, and state-changing register flows are mainnet-gated and require the explicit `I_UNDERSTAND_MAINNET` confirmation. Parent setup additionally requires `REGISTRAR_ADDRESS`.
 
 ## Flagship example
 
