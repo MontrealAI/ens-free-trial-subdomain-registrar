@@ -1,133 +1,40 @@
-# Ethereum Mainnet Deployment: FreeTrialSubdomainRegistrar
+# Ethereum Mainnet Deployment Status
 
-This document records the canonical public Ethereum Mainnet deployment and parent activation for this repository.
+## Live now (legacy/current release)
 
-## Network
+- Release: `v1.0.0`
+- Contract: `FreeTrialSubdomainRegistrar`
+- Address: `0x7aAE649184182A01Ac7D8D5d7873903015C08761`
+- Verified: https://etherscan.io/address/0x7aAE649184182A01Ac7D8D5d7873903015C08761#code
+- Deployment tx: https://etherscan.io/tx/0x70a17265c9f3bc142b5b1c660f32439084672bf60e21a5d20e1dd233f4f39e0a
+- Parent activation tx: https://etherscan.io/tx/0xddaa35a801612edd7dba3086e1740fb0c945d1eb1cc0c06f6b2ab78e713f6205
 
-- Network: Ethereum Mainnet
-- chainId: `1`
-- Contract name: `FreeTrialSubdomainRegistrar`
+## Next release target (deployment pending)
 
-## Live deployment references
+- Contract: `FreeTrialSubdomainRegistrarIdentity`
+- Source: `contracts/FreeTrialSubdomainRegistrarIdentity.sol`
+- Mainnet deployment: **not yet recorded in this repository**
+- Constructor shape: `(address wrapper, address registry)`
 
-- Contract address: `0x7aAE649184182A01Ac7D8D5d7873903015C08761`
-- Verified contract: https://etherscan.io/address/0x7aAE649184182A01Ac7D8D5d7873903015C08761#code
-- Deployment transaction: https://etherscan.io/tx/0x70a17265c9f3bc142b5b1c660f32439084672bf60e21a5d20e1dd233f4f39e0a
-- Parent activation transaction: https://etherscan.io/tx/0xddaa35a801612edd7dba3086e1740fb0c945d1eb1cc0c06f6b2ab78e713f6205
+Mainnet constants:
+- ENS Registry: `0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e`
+- ENS NameWrapper: `0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401`
 
-## Parent and protocol dependencies
-
-- Parent ENS name: `alpha.agent.agi.eth`
-- Parent node (namehash hex): `0xc74b6c5e8a0d97ed1fe28755da7d06a84593b4de92f6582327bc40f41d6c2d5e`
-- Parent node (decimal): `90143518335307518480231233843615928237269120030432379444131890004974153510238`
-- ENS NameWrapper (mainnet): `0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401`
-
-## Constructor arguments
-
-The deployed constructor parameters are:
-
-```text
-wrapper_ = 0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401
-```
-
-Note: trial duration is a contract constant (`TRIAL_PERIOD = 30 days`), not a constructor argument.
-
-## Activation function used
-
-The parent was activated using:
-
-```solidity
-activateParent(bytes32 parentNode)
-```
-
-With:
-
-```text
-parentNode = 0xc74b6c5e8a0d97ed1fe28755da7d06a84593b4de92f6582327bc40f41d6c2d5e
-```
-
-## Canonical reproducible commands
-
-If you are doing a fresh deployment, use your newly deployed registrar address for steps 2-4.
+## Canonical commands
 
 ```bash
-REGISTRAR_ADDRESS=0xYourNewlyDeployedRegistrarAddress
+# identity (explicit mode)
+npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --contract identity
+npm run verify:mainnet -- --address 0xYourIdentityAddress --contract identity
+
+# legacy registrar (default deploy mode)
+npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --contract legacy
+npm run verify:mainnet -- --address 0xYourRegistrarAddress --contract legacy
 ```
 
-You can export this from your shell (or set it in `.env`) after step 1.
+## Operator safety notes
 
-### 1) Deploy
-
-```bash
-npm run deploy:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET
-```
-
-### 2) Verify
-
-```bash
-npm run verify:mainnet -- --address "$REGISTRAR_ADDRESS"
-```
-
-### 3) Approve + activate parent
-
-```bash
-REGISTRAR_ADDRESS="$REGISTRAR_ADDRESS" PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate
-```
-
-### 4) Register example subname
-
-```bash
-npm run register:mainnet -- \
-  --registrar "$REGISTRAR_ADDRESS" \
-  --parent-name alpha.agent.agi.eth \
-  --label 12345678 \
-  --owner 0xRecipientAddress \
-  --confirm-mainnet I_UNDERSTAND_MAINNET
-```
-
-## Confirm parent is active
-
-Use one of:
-
-- Script preflight (read-only):
-
-```bash
-npm run doctor:mainnet -- --registrar 0x7aAE649184182A01Ac7D8D5d7873903015C08761 --parent-name alpha.agent.agi.eth --label 12345678
-
-# or against your own fresh deployment
-npm run doctor:mainnet -- --registrar "$REGISTRAR_ADDRESS" --parent-name alpha.agent.agi.eth --label 12345678
-```
-
-- Onchain read calls:
-  - `isParentActive(parentNode)` returns `true`
-  - `getParentStatus(parentNode)` should indicate parent locked, authorised, and usable
-
-## Deactivate or remove parent later
-
-Stop new minting immediately:
-
-```bash
-REGISTRAR_ADDRESS="$REGISTRAR_ADDRESS" PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action deactivate
-```
-
-Or remove registrar state for that parent:
-
-```bash
-REGISTRAR_ADDRESS="$REGISTRAR_ADDRESS" PARENT_NAME=alpha.agent.agi.eth npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action remove
-```
-
-These actions stop **new** free trial registrations. Previously minted names remain valid until their individual expiry.
-
-## Operator assumptions and warnings
-
-- State-changing scripts are mainnet-gated and require explicit `I_UNDERSTAND_MAINNET` confirmation.
-- Registration is free; sending ETH to `register` is rejected.
-- Labels must be single-label lowercase alphanumeric, length 8–63.
-- Dotted labels and full ENS names passed as labels are rejected by script/UX and contract validation.
-- Child owner is not granted `CAN_EXTEND_EXPIRY`; no child self-renewal path exists in this system.
-
-## Deployment manifest asset
-
-Machine-readable metadata for this deployment is stored at:
-
-- `release-assets/mainnet-deployment.json`
+- All state-changing scripts remain mainnet gated.
+- Registration remains free.
+- Label rules remain single-label lowercase alphanumeric, 8–63 chars.
+- No mainnet deployment claim is made for identity contract until real deployment metadata exists.

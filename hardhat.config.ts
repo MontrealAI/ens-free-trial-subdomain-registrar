@@ -3,8 +3,8 @@ import "@nomicfoundation/hardhat-toolbox";
 import { subtask, type HardhatUserConfig } from "hardhat/config";
 import { TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD } from "hardhat/builtin-tasks/task-names";
 
-const SOLC_VERSION = "0.8.17";
-const SOLC_LONG_VERSION = "0.8.17+commit.8df45f5f";
+const SOLC_VERSION = "0.8.24";
+const SOLC_LONG_VERSION = "0.8.24+commit.e11b9ed9";
 
 // Use a pinned local solc-js build to avoid fragile remote compiler downloads.
 subtask(TASK_COMPILE_SOLIDITY_GET_SOLC_BUILD).setAction(async ({ solcVersion }, _hre, runSuper) => {
