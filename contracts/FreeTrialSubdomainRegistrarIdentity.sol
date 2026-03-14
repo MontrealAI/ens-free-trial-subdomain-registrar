@@ -344,6 +344,11 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
         if (!_exists(tokenId)) revert NonexistentToken(tokenId);
 
         TokenData memory data = _tokenData[tokenId];
+        string memory json = _tokenUriJson(tokenId, data);
+        return string.concat("data:application/json;base64,", Base64.encode(bytes(json)));
+    }
+
+    function _tokenUriJson(uint256 tokenId, TokenData memory data) internal view returns (string memory) {
         string memory fullName = fullNameForLabel(data.label);
         (address wrappedOwner, , uint64 expiry) = _wrappedState(bytes32(tokenId));
         address tokenOwner = ownerOf(tokenId);
@@ -353,7 +358,7 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
             Base64.encode(bytes(_svg(fullName, tokenOwner, bytes32(tokenId), tokenId, expiry, statusText)))
         );
 
-        string memory json = string(
+        return string(
             abi.encodePacked(
                 '{"name":"',
                 fullName,
@@ -370,8 +375,6 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
                 "}"
             )
         );
-
-        return string.concat("data:application/json;base64,", Base64.encode(bytes(json)));
     }
 
     function supportsInterface(bytes4 interfaceId) public view override returns (bool) {
