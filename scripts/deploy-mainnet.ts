@@ -8,6 +8,8 @@ import {
   NAME_WRAPPER_MAINNET,
   ROOT_NAME,
   ROOT_NODE,
+  RELEASE_ARTIFACT_PATH,
+  artifactExists,
   getGitCommit,
   writeReleaseArtifact,
   requireMainnetBroadcastConfirmation
@@ -41,6 +43,13 @@ async function main() {
 
   const constructorArgs: [string, string] = [NAME_WRAPPER_MAINNET, ENS_REGISTRY_MAINNET];
   const confirmations = Number(readFlagValue(process.argv, "confirmations") || process.env.MAINNET_CONFIRMATIONS || "5");
+  const overwriteArtifact = hasFlag(process.argv, "overwrite-artifact");
+
+  if (!overwriteArtifact && (await artifactExists())) {
+    throw new Error(
+      `Artifact already exists at ${RELEASE_ARTIFACT_PATH}. Refusing to broadcast deployment without --overwrite-artifact.`
+    );
+  }
 
   console.log(`network: ${network.name}`);
   console.log(`chainId: ${net.chainId}`);
@@ -99,7 +108,7 @@ async function main() {
       deployedAt: new Date().toISOString(),
       gitCommit: getGitCommit()
     },
-    hasFlag(process.argv, "overwrite-artifact")
+    overwriteArtifact
   );
 
   const shouldVerify = hasFlag(process.argv, "verify") || Boolean(process.env.ETHERSCAN_API_KEY);

@@ -119,10 +119,13 @@ async function main() {
   console.log(`preview: ${JSON.stringify(preview, json, 2)}`);
 
   const status = Number(preview.status);
+  const isPaused = await registrar.paused();
   const mode = !registrarAddress
     ? "pre-deploy"
     : !(await registrar.rootActive())
       ? "post-deploy pre-activation"
+      : isPaused
+        ? "post-activation paused"
       : status === 7
         ? "post-deploy parent-unusable"
         : "post-activation ready";
