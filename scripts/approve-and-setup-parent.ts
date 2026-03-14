@@ -37,12 +37,10 @@ async function main() {
   const registrar = await ethers.getContractAt("FreeTrialSubdomainRegistrarIdentity", registrarAddress, signer);
 
   const [parentOwner] = await wrapper.getData(ROOT_NODE).catch(() => [ethers.ZeroAddress]);
-  if (parentOwner === ethers.ZeroAddress) {
-    throw new Error("Wrapped root not found on NameWrapper. Ensure alpha.agent.agi.eth is wrapped before setup.");
-  }
-  const locked = await wrapper.allFusesBurned(ROOT_NODE, CANNOT_UNWRAP);
-  const approved = await wrapper.isApprovedForAll(parentOwner, registrarAddress);
-  const canModify = await wrapper.canModifyName(ROOT_NODE, registrarAddress);
+  const parentExists = parentOwner !== ethers.ZeroAddress;
+  const locked = parentExists ? await wrapper.allFusesBurned(ROOT_NODE, CANNOT_UNWRAP) : false;
+  const approved = parentExists ? await wrapper.isApprovedForAll(parentOwner, registrarAddress) : false;
+  const canModify = parentExists ? await wrapper.canModifyName(ROOT_NODE, registrarAddress) : false;
   const contractOwner = await registrar.owner();
   const rootBefore = await registrar.rootActive();
 
@@ -55,6 +53,9 @@ async function main() {
   console.log(`contractAuthorised: ${canModify}`);
 
   if (hasFlag(process.argv, "approve-operator")) {
+    if (!parentExists) {
+      throw new Error("Cannot approve operator: wrapped root not found on NameWrapper. Ensure alpha.agent.agi.eth is wrapped first.");
+    }
     if (signer.address.toLowerCase() !== parentOwner.toLowerCase()) {
       throw new Error("--approve-operator requested but signer is not wrapped parent owner.");
     }
@@ -66,6 +67,9 @@ async function main() {
   }
 
   if (action === "activate") {
+    if (!parentExists) {
+      throw new Error("Cannot activate: wrapped root not found on NameWrapper. Ensure alpha.agent.agi.eth is wrapped before activation.");
+    }
     if (!locked) throw new Error("Cannot activate: parent is not locked (CANNOT_UNWRAP must be burned). Locking is irreversible.");
     const isApprovedNow = await wrapper.isApprovedForAll(parentOwner, registrarAddress);
     if (!isApprovedNow && !canModify) {
