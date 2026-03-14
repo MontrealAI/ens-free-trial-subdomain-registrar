@@ -1,11 +1,14 @@
 import { ethers } from "hardhat";
 
 import { hasFlag, readFlagValue } from "./utils/cli-flags";
-import { readReleaseArtifact, requireMainnetBroadcastConfirmation } from "./utils/mainnet-safety";
+import {
+  MAINNET_CHAIN_ID,
+  NAME_WRAPPER_MAINNET,
+  ROOT_NODE,
+  readReleaseArtifact,
+  requireMainnetBroadcastConfirmation
+} from "./utils/mainnet-safety";
 
-const CHAIN_ID = 1n;
-const WRAPPER = "0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401";
-const ROOT_NODE = "0xc74b6c5e8a0d97ed1fe28755da7d06a84593b4de92f6582327bc40f41d6c2d5e";
 const CANNOT_UNWRAP = 1n;
 
 const WRAPPER_ABI = [
@@ -17,30 +20,40 @@ const WRAPPER_ABI = [
 ];
 
 function usage() {
-  console.log("Usage: npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate|deactivate [--registrar 0x...] [--approve-operator]");
+  console.log(
+    "Usage: npm run setup:parent:mainnet -- --confirm-mainnet I_UNDERSTAND_MAINNET --action activate|deactivate [--registrar 0x...] [--approve-operator]"
+  );
 }
 
 async function main() {
   if (hasFlag(process.argv, "help")) return usage();
   requireMainnetBroadcastConfirmation(process.argv, "setup parent on Ethereum mainnet");
-  if ((await ethers.provider.getNetwork()).chainId !== CHAIN_ID) throw new Error("Mainnet only.");
+
+  const net = await ethers.provider.getNetwork();
+  if (net.chainId !== MAINNET_CHAIN_ID) {
+    throw new Error(`Mainnet only. Connected chainId=${net.chainId}`);
+  }
 
   const artifact = await readReleaseArtifact().catch(() => undefined);
   const registrarAddress = readFlagValue(process.argv, "registrar") || process.env.REGISTRAR_ADDRESS || artifact?.address;
-  if (!registrarAddress || !ethers.isAddress(registrarAddress)) throw new Error("Missing --registrar and no deployment artifact found.");
+  if (!registrarAddress || !ethers.isAddress(registrarAddress)) {
+    throw new Error("Missing --registrar and no deployment artifact found.");
+  }
 
   const action = readFlagValue(process.argv, "action");
-  if (action !== "activate" && action !== "deactivate") throw new Error("--action must be activate or deactivate.");
+  if (action !== "activate" && action !== "deactivate") {
+    throw new Error("--action must be activate or deactivate.");
+  }
 
   const [signer] = await ethers.getSigners();
-  const wrapper = await ethers.getContractAt(WRAPPER_ABI, WRAPPER, signer);
+  const wrapper = await ethers.getContractAt(WRAPPER_ABI, NAME_WRAPPER_MAINNET, signer);
   const registrar = await ethers.getContractAt("FreeTrialSubdomainRegistrarIdentity", registrarAddress, signer);
 
-  const [parentOwner] = await wrapper.getData(ROOT_NODE).catch(() => [ethers.ZeroAddress]);
-  const parentExists = parentOwner !== ethers.ZeroAddress;
-  const locked = parentExists ? await wrapper.allFusesBurned(ROOT_NODE, CANNOT_UNWRAP) : false;
-  const approved = parentExists ? await wrapper.isApprovedForAll(parentOwner, registrarAddress) : false;
-  const canModify = parentExists ? await wrapper.canModifyName(ROOT_NODE, registrarAddress) : false;
+  const [parentOwner] = await wrapper.getData(ROOT_NODE).catch(() => [ethers.ZeroAddress] as const);
+  const parentWrapped = parentOwner !== ethers.ZeroAddress;
+  const parentLocked = parentWrapped ? await wrapper.allFusesBurned(ROOT_NODE, CANNOT_UNWRAP) : false;
+  const approved = parentWrapped ? await wrapper.isApprovedForAll(parentOwner, registrarAddress) : false;
+  const canModify = parentWrapped ? await wrapper.canModifyName(ROOT_NODE, registrarAddress) : false;
   const contractOwner = await registrar.owner();
   const rootBefore = await registrar.rootActive();
 
@@ -48,40 +61,38 @@ async function main() {
   console.log(`contractOwner: ${contractOwner}`);
   console.log(`wrappedParentOwner: ${parentOwner}`);
   console.log(`rootActiveBefore: ${rootBefore}`);
-  console.log(`parentLocked: ${locked}`);
+  console.log(`parentWrapped: ${parentWrapped}`);
+  console.log(`parentLocked: ${parentLocked}`);
   console.log(`approvalStatus: ${approved}`);
   console.log(`contractAuthorised: ${canModify}`);
 
   if (hasFlag(process.argv, "approve-operator")) {
-    if (!parentExists) {
-      throw new Error("Cannot approve operator: wrapped root not found on NameWrapper. Ensure alpha.agent.agi.eth is wrapped first.");
+    if (!parentWrapped) {
+      throw new Error("Cannot approve operator: wrapped root not found. Wrap alpha.agent.agi.eth first.");
     }
     if (signer.address.toLowerCase() !== parentOwner.toLowerCase()) {
       throw new Error("--approve-operator requested but signer is not wrapped parent owner.");
     }
     if (!approved) {
-      const tx = await wrapper.setApprovalForAll(registrarAddress, true);
-      await tx.wait();
-      console.log(`setApprovalForAll tx: ${tx.hash}`);
+      const approvalTx = await wrapper.setApprovalForAll(registrarAddress, true);
+      await approvalTx.wait();
+      console.log(`setApprovalForAll tx: ${approvalTx.hash}`);
     }
+  }
+
+  if (signer.address.toLowerCase() !== contractOwner.toLowerCase()) {
+    throw new Error(`Signer ${signer.address} is not contract owner ${contractOwner}; cannot ${action} root.`);
   }
 
   if (action === "activate") {
-    if (!parentExists) {
-      throw new Error("Cannot activate: wrapped root not found on NameWrapper. Ensure alpha.agent.agi.eth is wrapped before activation.");
-    }
-    if (!locked) throw new Error("Cannot activate: parent is not locked (CANNOT_UNWRAP must be burned). Locking is irreversible.");
-    const isApprovedNow = await wrapper.isApprovedForAll(parentOwner, registrarAddress);
-    if (!isApprovedNow && !canModify) {
-      throw new Error("Cannot activate: registrar is not authorized on NameWrapper. Use --approve-operator from wrapped parent owner account.");
-    }
-    if (signer.address.toLowerCase() !== contractOwner.toLowerCase()) {
-      throw new Error("Cannot activate: signer is not contract owner.");
-    }
-  }
+    if (!parentWrapped) throw new Error("Cannot activate: wrapped root not found on NameWrapper.");
+    if (!parentLocked) throw new Error("Cannot activate: parent is not locked (CANNOT_UNWRAP burned required). Locking is irreversible.");
 
-  if (action === "deactivate" && signer.address.toLowerCase() !== contractOwner.toLowerCase()) {
-    throw new Error("Cannot deactivate: signer is not contract owner.");
+    const approvedNow = await wrapper.isApprovedForAll(parentOwner, registrarAddress);
+    const canModifyNow = await wrapper.canModifyName(ROOT_NODE, registrarAddress);
+    if (!approvedNow && !canModifyNow) {
+      throw new Error("Cannot activate: registrar is not authorized on NameWrapper. Use --approve-operator from parent owner account.");
+    }
   }
 
   const tx = await registrar.setRootActive(action === "activate");

@@ -1,15 +1,18 @@
 import { ethers } from "hardhat";
 
 import { hasFlag, readFlagValue } from "./utils/cli-flags";
-import { readReleaseArtifact } from "./utils/mainnet-safety";
+import {
+  ENS_REGISTRY_MAINNET,
+  MAINNET_CHAIN_ID,
+  NAME_WRAPPER_MAINNET,
+  RELEASE_ARTIFACT_PATH,
+  ROOT_NAME,
+  ROOT_NODE,
+  readReleaseArtifact
+} from "./utils/mainnet-safety";
 
-const CHAIN_ID = 1n;
-const WRAPPER = "0xD4416b13d2b3a9aBae7AcD5D6C2BbDBE25686401";
-const REGISTRY = "0x00000000000C2E074eC69A0dFb2997BA6C7d2e1e";
-const ROOT_NAME = "alpha.agent.agi.eth";
-const ROOT_NODE = "0xc74b6c5e8a0d97ed1fe28755da7d06a84593b4de92f6582327bc40f41d6c2d5e";
 const CANNOT_UNWRAP = 1n;
-
+const IS_DOT_ETH = 1n << 17n;
 const WRAPPER_ABI = [
   "function getData(uint256) view returns (address owner, uint32 fuses, uint64 expiry)",
   "function allFusesBurned(bytes32,uint32) view returns (bool)",
@@ -22,44 +25,70 @@ function usage() {
 
 async function main() {
   if (hasFlag(process.argv, "help")) return usage();
+
   const provider = ethers.provider;
   const net = await provider.getNetwork();
-  if (net.chainId !== CHAIN_ID) throw new Error(`Mainnet only. chainId=${net.chainId}`);
+  if (net.chainId !== MAINNET_CHAIN_ID) {
+    throw new Error(`Mainnet only. Connected chainId=${net.chainId}`);
+  }
 
-  const signer = await ethers.getSigners().then((all) => all[0]).catch(() => undefined);
-  const signerAddress = signer?.address;
-  const signerBal = signerAddress ? await provider.getBalance(signerAddress) : undefined;
-  const wrapperCode = await provider.getCode(WRAPPER);
-  const registryCode = await provider.getCode(REGISTRY);
   const artifact = await readReleaseArtifact().catch(() => undefined);
-
   const registrarAddress = readFlagValue(process.argv, "registrar") || process.env.REGISTRAR_ADDRESS || artifact?.address;
-  const label = readFlagValue(process.argv, "label") || "12345678";
+  const sampleLabel = readFlagValue(process.argv, "label") || "12345678";
 
-  console.log(`# mainnet doctor`);
+  let signerAddress: string | undefined;
+  try {
+    const [signer] = await ethers.getSigners();
+    signerAddress = signer?.address;
+  } catch {
+    signerAddress = undefined;
+  }
+
+  console.log("# mainnet doctor (read-only)");
   console.log(`chainId: ${net.chainId}`);
-  console.log(`rpc: connected`);
-  console.log(`signer: ${signerAddress ?? "n/a (set DEPLOYER_PRIVATE_KEY for signer checks)"}`);
-  console.log(`signerBalanceEth: ${signerBal !== undefined ? ethers.formatEther(signerBal) : "n/a"}`);
+  console.log("rpcConnectivity: ok");
+
+  if (signerAddress) {
+    console.log(`signer: ${signerAddress}`);
+    console.log(`signerBalanceEth: ${ethers.formatEther(await provider.getBalance(signerAddress))}`);
+  } else {
+    console.log("signer: n/a (DEPLOYER_PRIVATE_KEY not configured; signer-only checks skipped)");
+  }
+
+  const wrapperCode = await provider.getCode(NAME_WRAPPER_MAINNET);
+  const registryCode = await provider.getCode(ENS_REGISTRY_MAINNET);
+  console.log(`wrapper: ${NAME_WRAPPER_MAINNET}`);
   console.log(`wrapperCodePresent: ${wrapperCode !== "0x"}`);
+  console.log(`ensRegistry: ${ENS_REGISTRY_MAINNET}`);
   console.log(`ensRegistryCodePresent: ${registryCode !== "0x"}`);
+
+  const computed = ethers.namehash(ROOT_NAME);
   console.log(`rootName: ${ROOT_NAME}`);
   console.log(`rootNode: ${ROOT_NODE}`);
-  console.log(`rootNamehashMatches: ${ethers.namehash(ROOT_NAME).toLowerCase() === ROOT_NODE.toLowerCase()}`);
+  console.log(`ethers.namehash(ROOT_NAME): ${computed}`);
+  console.log(`rootNamehashMatches: ${computed.toLowerCase() === ROOT_NODE.toLowerCase()}`);
 
-  const wrapper = await ethers.getContractAt(WRAPPER_ABI, WRAPPER);
-  const [parentOwner, parentFuses, parentExpiry] = await wrapper.getData(ROOT_NODE).catch(() => [ethers.ZeroAddress, 0, 0]);
-  const parentLocked = await wrapper.allFusesBurned(ROOT_NODE, CANNOT_UNWRAP).catch(() => false);
-  const effectiveExpiry = (BigInt(parentFuses) & (1n << 17n)) !== 0n ? Math.max(0, Number(parentExpiry) - 90 * 24 * 60 * 60) : Number(parentExpiry);
+  const wrapper = await ethers.getContractAt(WRAPPER_ABI, NAME_WRAPPER_MAINNET);
+  const [parentOwner, parentFuses, parentExpiry] = await wrapper
+    .getData(ROOT_NODE)
+    .catch(() => [ethers.ZeroAddress, 0n, 0n] as const);
+  const parentWrapped = parentOwner !== ethers.ZeroAddress;
+  const parentLocked = parentWrapped ? await wrapper.allFusesBurned(ROOT_NODE, CANNOT_UNWRAP) : false;
+  const parentIsDotEth = (BigInt(parentFuses) & IS_DOT_ETH) !== 0n;
+  const effectiveParentExpiry = parentIsDotEth
+    ? Math.max(0, Number(parentExpiry) - 90 * 24 * 60 * 60)
+    : Number(parentExpiry);
 
-  console.log(`parentOwner: ${parentOwner}`);
+  console.log(`wrappedParentOwner: ${parentOwner}`);
+  console.log(`parentWrapped: ${parentWrapped}`);
   console.log(`parentLocked: ${parentLocked}`);
-  console.log(`parentExpiry: ${parentExpiry}`);
-  console.log(`parentEffectiveExpiry: ${effectiveExpiry}`);
+  console.log(`parentWrapperExpiry: ${parentExpiry}`);
+  console.log(`effectiveParentExpiry: ${effectiveParentExpiry}`);
 
   if (!registrarAddress) {
-    console.log("registrarAuthorised: n/a (no registrar provided)");
-    console.log(`mode: pre-deploy (no registrar address/artifact)`);
+    console.log("registrar: n/a");
+    console.log(`artifact: ${RELEASE_ARTIFACT_PATH} not found (pre-deploy mode)`);
+    console.log("mode: pre-deploy");
     return;
   }
 
@@ -69,29 +98,35 @@ async function main() {
   if (registrarCode === "0x") return;
 
   const registrar = await ethers.getContractAt("FreeTrialSubdomainRegistrarIdentity", registrarAddress);
-  const authorised = await wrapper.canModifyName(ROOT_NODE, registrarAddress);
+  const registrarAuthorised = await wrapper.canModifyName(ROOT_NODE, registrarAddress);
+  const health = await registrar.rootHealth();
+  const json = (_k: string, value: unknown) => (typeof value === "bigint" ? value.toString() : value);
 
   console.log(`contractOwner: ${await registrar.owner()}`);
   console.log(`contractWrapper: ${await registrar.wrapper()}`);
   console.log(`contractEnsRegistry: ${await registrar.ensRegistry()}`);
+  console.log(`contractRootName: ${await registrar.ROOT_NAME()}`);
+  console.log(`contractRootNode: ${await registrar.ROOT_NODE()}`);
   console.log(`rootActive: ${await registrar.rootActive()}`);
   console.log(`paused: ${await registrar.paused()}`);
-  console.log(`registrarAuthorised: ${authorised}`);
+  console.log(`registrarAuthorisedOnWrapper: ${registrarAuthorised}`);
+  console.log(`rootHealth: ${JSON.stringify(health, json, 2)}`);
 
-  console.log(`sampleLabel: ${label}`);
-  console.log(`sampleLabelValid: ${await registrar.validateLabel(label)}`);
-  const p = await registrar.preview(label);
-  console.log(`preview.status: ${p.status}`);
-  console.log(`preview.fullName: ${p.fullName}`);
-  console.log(`preview.available: ${p.availableOut}`);
-  console.log(`available: ${await registrar.available(label)}`);
+  console.log(`sampleLabel: ${sampleLabel}`);
+  console.log(`sampleLabelValid: ${await registrar.validateLabel(sampleLabel)}`);
+  console.log(`sampleAvailable: ${await registrar.available(sampleLabel)}`);
+  const preview = await registrar.preview(sampleLabel);
+  console.log(`preview: ${JSON.stringify(preview, json, 2)}`);
 
-  const phase = !(await registrar.rootActive())
-    ? "post-deploy pre-activation"
-    : (await registrar.paused())
-      ? "post-activation paused"
-      : "post-activation ready";
-  console.log(`mode: ${phase}`);
+  const status = Number(preview.status);
+  const mode = !registrarAddress
+    ? "pre-deploy"
+    : !(await registrar.rootActive())
+      ? "post-deploy pre-activation"
+      : status === 7
+        ? "post-deploy parent-unusable"
+        : "post-activation ready";
+  console.log(`mode: ${mode}`);
 }
 
 main().catch((error) => {

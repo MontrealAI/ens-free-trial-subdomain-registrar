@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity 0.8.24;
 
-import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
-import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {Pausable} from "@openzeppelin/contracts/security/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {ERC721} from "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
+import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 uint32 constant CANNOT_UNWRAP = 1;
 uint32 constant CANNOT_TRANSFER = 1 << 2;
@@ -38,7 +38,8 @@ interface IERC5192 {
     function locked(uint256 tokenId) external view returns (bool);
 }
 
-error InvalidAddress();
+error ZeroAddress();
+error DependencyHasNoCode(address dependency);
 error InvalidRootConfig();
 error ParentNotWrapped();
 error ParentExpired();
@@ -48,6 +49,8 @@ error RootInactive();
 error InvalidLabel();
 error NameUnavailable(bytes32 node);
 error WrappedOwnerMismatch(address expected, address actual);
+error WrappedFuseMismatch(uint32 required, uint32 actual);
+error WrappedExpiryMismatch(uint64 expected, uint64 actual);
 error IdentityNotEligible(uint256 tokenId);
 error Soulbound();
 error EtherNotAccepted();
@@ -63,15 +66,28 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
     uint64 public constant PARENT_GRACE_PERIOD = 90 days;
     uint256 public constant MIN_LABEL_LENGTH = 8;
     uint256 public constant MAX_LABEL_LENGTH = 63;
+    uint32 public constant REQUIRED_CHILD_FUSES = CANNOT_UNWRAP | CANNOT_TRANSFER | PARENT_CANNOT_CONTROL;
 
-    // 0: active, 1: expired, 2: desynced, 3: unavailable, 4: invalid-label, 5: root-inactive, 6: parent-unusable
-    uint8 internal constant STATUS_ACTIVE = 0;
-    uint8 internal constant STATUS_EXPIRED = 1;
-    uint8 internal constant STATUS_DESYNCED = 2;
-    uint8 internal constant STATUS_UNAVAILABLE = 3;
-    uint8 internal constant STATUS_INVALID_LABEL = 4;
-    uint8 internal constant STATUS_ROOT_INACTIVE = 5;
-    uint8 internal constant STATUS_PARENT_UNUSABLE = 6;
+    // 0 available, 1 active, 2 claimable, 3 expired, 4 desynced, 5 invalid-label, 6 root-inactive, 7 parent-unusable, 8 unavailable
+    uint8 internal constant STATUS_AVAILABLE = 0;
+    uint8 internal constant STATUS_ACTIVE = 1;
+    uint8 internal constant STATUS_CLAIMABLE = 2;
+    uint8 internal constant STATUS_EXPIRED = 3;
+    uint8 internal constant STATUS_DESYNCED = 4;
+    uint8 internal constant STATUS_INVALID_LABEL = 5;
+    uint8 internal constant STATUS_ROOT_INACTIVE = 6;
+    uint8 internal constant STATUS_PARENT_UNUSABLE = 7;
+    uint8 internal constant STATUS_UNAVAILABLE = 8;
+
+
+    struct ParentHealthData {
+        bool usable;
+        bool wrapped;
+        bool locked;
+        bool authorised;
+        uint64 effectiveExpiry;
+        address owner;
+    }
 
     struct TokenData {
         string label;
@@ -88,9 +104,15 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
         uint256 tokenId;
         bool rootActiveOut;
         bool pausedOut;
+        bool parentWrapped;
         bool parentLocked;
         bool registrarAuthorised;
+        bool rootUsable;
         bool availableOut;
+        bool identityExists;
+        bool registrable;
+        bool claimable;
+        address tokenOwner;
         address wrappedOwner;
         address resolver;
         uint64 currentWrappedExpiry;
@@ -111,7 +133,9 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
     event IdentitySynced(uint256 indexed tokenId, bool burned, address wrappedOwner, uint64 wrappedExpiry);
 
     constructor(address nameWrapper, address registry) ERC721("Alpha Agent Identity", "ALPHAID") {
-        if (nameWrapper == address(0) || registry == address(0)) revert InvalidAddress();
+        if (nameWrapper == address(0) || registry == address(0)) revert ZeroAddress();
+        if (nameWrapper.code.length == 0) revert DependencyHasNoCode(nameWrapper);
+        if (registry.code.length == 0) revert DependencyHasNoCode(registry);
         if (_namehash(ROOT_NAME) != ROOT_NODE) revert InvalidRootConfig();
         wrapper = INameWrapper(nameWrapper);
         ensRegistry = IENSRegistry(registry);
@@ -126,7 +150,9 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
     }
 
     function setRootActive(bool active) external onlyOwner {
-        if (active) _requireParentReady();
+        if (active) {
+            _requireParentReady();
+        }
         rootActive = active;
         emit RootActivationSet(active);
     }
@@ -139,42 +165,76 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
         _unpause();
     }
 
+    function rootHealth()
+        external
+        view
+        returns (
+            string memory rootName,
+            bytes32 rootNode,
+            bool active,
+            bool pausedOut,
+            address wrapperAddress,
+            address ensRegistryAddress,
+            address contractOwner,
+            address wrappedParentOwner,
+            bool parentWrapped,
+            bool parentLocked,
+            bool registrarAuthorised,
+            uint64 effectiveParentExpiry,
+            bool rootUsable
+        )
+    {
+                ParentHealthData memory parent = _parentHealth();
+        return (
+            ROOT_NAME,
+            ROOT_NODE,
+            rootActive,
+            paused(),
+            address(wrapper),
+            address(ensRegistry),
+            owner(),
+            parent.owner,
+            parent.wrapped,
+            parent.locked,
+            parent.authorised,
+            parent.effectiveExpiry,
+            parent.usable
+        );
+    }
+
     function register(string calldata label) external whenNotPaused nonReentrant returns (uint256 tokenId) {
         if (!rootActive) revert RootInactive();
         if (!_isValidLabel(label)) revert InvalidLabel();
         _requireParentReady();
 
-        bytes32 node = _nodeForLabel(label);
+        bytes32 node = nodeForLabel(label);
+        tokenId = uint256(node);
+
         (address wrappedOwner, , uint64 wrappedExpiry) = _wrappedState(node);
         if (wrappedOwner != address(0) && wrappedExpiry > block.timestamp) revert NameUnavailable(node);
 
         uint64 expiry = _childExpiry();
-        wrapper.setSubnodeRecord(
-            ROOT_NODE,
-            label,
-            msg.sender,
-            address(0),
-            0,
-            CANNOT_UNWRAP | CANNOT_TRANSFER | PARENT_CANNOT_CONTROL,
-            expiry
-        );
+        wrapper.setSubnodeRecord(ROOT_NODE, label, msg.sender, address(0), 0, REQUIRED_CHILD_FUSES, expiry);
 
-        (address ownerAfter, , ) = _wrappedState(node);
+        (address ownerAfter, uint32 fusesAfter, uint64 expiryAfter) = _wrappedState(node);
         if (ownerAfter != msg.sender) revert WrappedOwnerMismatch(msg.sender, ownerAfter);
+        if ((fusesAfter & REQUIRED_CHILD_FUSES) != REQUIRED_CHILD_FUSES) {
+            revert WrappedFuseMismatch(REQUIRED_CHILD_FUSES, fusesAfter);
+        }
+        if (expiryAfter != expiry) revert WrappedExpiryMismatch(expiry, expiryAfter);
 
-        tokenId = uint256(node);
         _mintOrRefresh(tokenId, msg.sender, label);
-
         emit IdentityRegistered(msg.sender, label, node, expiry);
     }
 
     function claimIdentity(string calldata label) external nonReentrant returns (uint256 tokenId) {
         if (!_isValidLabel(label)) revert InvalidLabel();
-        bytes32 node = _nodeForLabel(label);
-        tokenId = uint256(node);
 
-        (address wrappedOwner, , uint64 expiry) = _wrappedState(node);
-        if (wrappedOwner == address(0) || expiry <= block.timestamp || wrappedOwner != msg.sender) {
+        bytes32 node = nodeForLabel(label);
+        tokenId = uint256(node);
+        (address wrappedOwner, , uint64 wrappedExpiry) = _wrappedState(node);
+
+        if (wrappedOwner == address(0) || wrappedExpiry <= block.timestamp || wrappedOwner != msg.sender) {
             revert IdentityNotEligible(tokenId);
         }
 
@@ -192,17 +252,33 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
 
     function syncIdentityByLabel(string calldata label) external returns (bool burned) {
         if (!_isValidLabel(label)) revert InvalidLabel();
-        burned = _syncIdentity(uint256(_nodeForLabel(label)));
+        uint256 tokenId = uint256(nodeForLabel(label));
+        if (!_exists(tokenId)) return false;
+        burned = _syncIdentity(tokenId);
     }
 
     function available(string calldata label) external view returns (bool) {
         if (!_isValidLabel(label)) return false;
-        (address wrappedOwner, , uint64 expiry) = _wrappedState(_nodeForLabel(label));
-        return wrappedOwner == address(0) || expiry <= block.timestamp;
+        (address wrappedOwner, , uint64 wrappedExpiry) = _wrappedState(nodeForLabel(label));
+        return wrappedOwner == address(0) || wrappedExpiry <= block.timestamp;
     }
 
     function validateLabel(string calldata label) external pure returns (bool) {
         return _isValidLabel(label);
+    }
+
+    function nodeForLabel(string memory label) public pure returns (bytes32) {
+        return keccak256(abi.encodePacked(ROOT_NODE, keccak256(bytes(label))));
+    }
+
+    function fullNameForLabel(string memory label) public pure returns (string memory) {
+        return string.concat(label, ".", ROOT_NAME);
+    }
+
+    function labelData(uint256 tokenId) external view returns (string memory label, bytes32 labelhash, uint64 mintedAt) {
+        if (!_exists(tokenId)) revert NonexistentToken(tokenId);
+        TokenData memory data = _tokenData[tokenId];
+        return (data.label, data.labelhash, data.mintedAt);
     }
 
     function preview(string calldata label) external view returns (PreviewResult memory r) {
@@ -211,9 +287,11 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
         r.rootActiveOut = rootActive;
         r.pausedOut = paused();
 
-        (bool parentUsable, bool lockedOut, bool authorisedOut, uint64 parentExpiry) = _parentHealth();
-        r.parentLocked = lockedOut;
-        r.registrarAuthorised = authorisedOut;
+        ParentHealthData memory parent = _parentHealth();
+        r.rootUsable = parent.usable;
+        r.parentWrapped = parent.wrapped;
+        r.parentLocked = parent.locked;
+        r.registrarAuthorised = parent.authorised;
 
         if (!r.validLabel) {
             r.status = STATUS_INVALID_LABEL;
@@ -221,43 +299,40 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
         }
 
         r.labelhash = keccak256(bytes(label));
-        r.node = keccak256(abi.encodePacked(ROOT_NODE, r.labelhash));
+        r.node = nodeForLabel(label);
         r.tokenId = uint256(r.node);
-        r.fullName = _fullName(label);
+        r.fullName = fullNameForLabel(label);
+        r.expectedNewExpiry = _expectedChildExpiry(parent.effectiveExpiry, r.rootUsable);
 
         (r.wrappedOwner, , r.currentWrappedExpiry) = _wrappedState(r.node);
         r.resolver = ensRegistry.resolver(r.node);
-        r.expectedNewExpiry = _expectedChildExpiry(parentExpiry, parentUsable);
         r.availableOut = r.wrappedOwner == address(0) || r.currentWrappedExpiry <= block.timestamp;
 
-        if (!parentUsable) r.status = STATUS_PARENT_UNUSABLE;
-        else if (!r.rootActiveOut) r.status = STATUS_ROOT_INACTIVE;
-        else if (r.wrappedOwner == address(0) || r.currentWrappedExpiry <= block.timestamp) r.status = STATUS_EXPIRED;
-        else if (_exists(r.tokenId) && ownerOf(r.tokenId) != r.wrappedOwner) r.status = STATUS_DESYNCED;
-        else if (_exists(r.tokenId) && ownerOf(r.tokenId) == r.wrappedOwner) r.status = STATUS_ACTIVE;
-        else r.status = STATUS_UNAVAILABLE;
-    }
+        r.identityExists = _exists(r.tokenId);
+        if (r.identityExists) {
+            r.tokenOwner = ownerOf(r.tokenId);
+        }
 
-    function rootInfo()
-        external
-        view
-        returns (
-            string memory rootName,
-            bytes32 rootNode,
-            bool active,
-            bool pausedOut,
-            address wrapperAddress,
-            address ensRegistryAddress,
-            address contractOwner
-        )
-    {
-        return (ROOT_NAME, ROOT_NODE, rootActive, paused(), address(wrapper), address(ensRegistry), owner());
-    }
+        r.registrable = r.validLabel && r.rootActiveOut && !r.pausedOut && r.rootUsable && r.availableOut;
+        r.claimable = r.validLabel && r.wrappedOwner != address(0) && r.currentWrappedExpiry > block.timestamp && !r.identityExists;
 
-    function labelData(uint256 tokenId) external view returns (string memory label, bytes32 labelhash, uint64 mintedAt) {
-        if (!_exists(tokenId)) revert NonexistentToken(tokenId);
-        TokenData memory data = _tokenData[tokenId];
-        return (data.label, data.labelhash, data.mintedAt);
+        if (!r.rootUsable) {
+            r.status = STATUS_PARENT_UNUSABLE;
+        } else if (!r.rootActiveOut) {
+            r.status = STATUS_ROOT_INACTIVE;
+        } else if (r.wrappedOwner == address(0)) {
+            r.status = STATUS_AVAILABLE;
+        } else if (r.currentWrappedExpiry <= block.timestamp) {
+            r.status = r.identityExists ? STATUS_EXPIRED : STATUS_AVAILABLE;
+        } else if (!r.identityExists) {
+            r.status = STATUS_CLAIMABLE;
+        } else if (r.tokenOwner != r.wrappedOwner) {
+            r.status = STATUS_DESYNCED;
+        } else if (!r.availableOut) {
+            r.status = STATUS_ACTIVE;
+        } else {
+            r.status = STATUS_UNAVAILABLE;
+        }
     }
 
     function locked(uint256 tokenId) external view returns (bool) {
@@ -269,26 +344,32 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
         if (!_exists(tokenId)) revert NonexistentToken(tokenId);
 
         TokenData memory data = _tokenData[tokenId];
-        string memory fullName = _fullName(data.label);
-        bytes32 node = bytes32(tokenId);
-        (address wrappedOwner, , uint64 expiry) = _wrappedState(node);
+        string memory fullName = fullNameForLabel(data.label);
+        (address wrappedOwner, , uint64 expiry) = _wrappedState(bytes32(tokenId));
         address tokenOwner = ownerOf(tokenId);
         string memory statusText = _liveStatus(tokenOwner, wrappedOwner, expiry);
+        string memory image = string.concat(
+            "data:image/svg+xml;base64,",
+            Base64.encode(bytes(_svg(fullName, tokenOwner, bytes32(tokenId), tokenId, expiry, statusText)))
+        );
 
-        string memory svg = _svg(fullName, tokenOwner, node, tokenId, expiry, statusText);
-        string memory image = string.concat("data:image/svg+xml;base64,", Base64.encode(bytes(svg)));
-
-        string memory json = '{"name":"';
-        json = string.concat(json, fullName);
-        json = string.concat(json, '","description":"Soulbound identity for alpha.agent.agi.eth registrations.","image":"');
-        json = string.concat(json, image);
-        json = string.concat(json, '","attributes":[');
-        json = string.concat(json, '{"trait_type":"root","value":"', ROOT_NAME, '"},');
-        json = string.concat(json, '{"trait_type":"label","value":"', data.label, '"},');
-        json = string.concat(json, '{"trait_type":"soulbound","value":"true"},');
-        json = string.concat(json, '{"trait_type":"status","value":"', statusText, '"}],"extension":');
-        json = string.concat(json, _extension(tokenId, data));
-        json = string.concat(json, "}");
+        string memory json = string(
+            abi.encodePacked(
+                '{"name":"',
+                fullName,
+                '","description":"Soulbound identity for alpha.agent.agi.eth registrations.","image":"',
+                image,
+                '","attributes":[{"trait_type":"root","value":"',
+                ROOT_NAME,
+                '"},{"trait_type":"label","value":"',
+                data.label,
+                '"},{"trait_type":"soulbound","value":"true"},{"trait_type":"status","value":"',
+                statusText,
+                '"}],"extension":',
+                _extension(tokenId, data),
+                "}"
+            )
+        );
 
         return string.concat("data:application/json;base64,", Base64.encode(bytes(json)));
     }
@@ -320,15 +401,19 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
     function _syncIdentity(uint256 tokenId) internal returns (bool burned) {
         if (!_exists(tokenId)) revert NonexistentToken(tokenId);
 
-        (address wrappedOwner, , uint64 expiry) = _wrappedState(bytes32(tokenId));
-        burned = wrappedOwner == address(0) || expiry <= block.timestamp || ownerOf(tokenId) != wrappedOwner;
-        if (burned) _burnIdentity(tokenId);
-
-        emit IdentitySynced(tokenId, burned, wrappedOwner, expiry);
+        (address wrappedOwner, , uint64 wrappedExpiry) = _wrappedState(bytes32(tokenId));
+        burned = wrappedOwner == address(0) || wrappedExpiry <= block.timestamp || ownerOf(tokenId) != wrappedOwner;
+        if (burned) {
+            _burnIdentity(tokenId);
+        }
+        emit IdentitySynced(tokenId, burned, wrappedOwner, wrappedExpiry);
     }
 
     function _mintOrRefresh(uint256 tokenId, address newOwner, string memory label) internal {
-        if (_exists(tokenId)) _burnIdentity(tokenId);
+        if (_exists(tokenId)) {
+            _burnIdentity(tokenId);
+        }
+
         _mint(newOwner, tokenId);
         _tokenData[tokenId] = TokenData({label: label, labelhash: keccak256(bytes(label)), mintedAt: uint64(block.timestamp)});
         emit Locked(tokenId);
@@ -340,24 +425,17 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
     }
 
     function _requireParentReady() internal view {
-        (address wrappedOwner, uint32 fuses, uint64 expiry) = _wrappedState(ROOT_NODE);
-        if (wrappedOwner == address(0)) revert ParentNotWrapped();
-
-        uint64 effectiveExpiry = expiry;
-        if ((fuses & IS_DOT_ETH) != 0) {
-            if (expiry <= PARENT_GRACE_PERIOD) revert ParentExpired();
-            effectiveExpiry = expiry - PARENT_GRACE_PERIOD;
-        }
-        if (effectiveExpiry <= block.timestamp) revert ParentExpired();
-
-        if (!wrapper.allFusesBurned(ROOT_NODE, CANNOT_UNWRAP)) revert ParentNotLocked();
-        if (!wrapper.canModifyName(ROOT_NODE, address(this))) revert RegistrarNotAuthorised();
+        ParentHealthData memory parent = _parentHealth();
+        if (!parent.wrapped) revert ParentNotWrapped();
+        if (!parent.locked) revert ParentNotLocked();
+        if (!parent.authorised) revert RegistrarNotAuthorised();
+        if (!parent.usable) revert ParentExpired();
     }
 
     function _childExpiry() internal view returns (uint64) {
-        (bool parentUsable, , , uint64 parentExpiry) = _parentHealth();
-        if (!parentUsable) revert ParentExpired();
-        return _expectedChildExpiry(parentExpiry, true);
+        ParentHealthData memory parent = _parentHealth();
+        if (!parent.usable) revert ParentExpired();
+        return _expectedChildExpiry(parent.effectiveExpiry, true);
     }
 
     function _expectedChildExpiry(uint64 parentExpiry, bool parentUsable) internal view returns (uint64) {
@@ -366,75 +444,82 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
         return parentExpiry < trialCap ? parentExpiry : trialCap;
     }
 
-    function _parentHealth() internal view returns (bool usable, bool parentLockedOut, bool registrarAuthorisedOut, uint64 effectiveExpiry) {
-        (address owner, uint32 fuses, uint64 expiry) = _wrappedState(ROOT_NODE);
-        if (owner == address(0)) return (false, false, false, 0);
-
-        parentLockedOut = wrapper.allFusesBurned(ROOT_NODE, CANNOT_UNWRAP);
-        registrarAuthorisedOut = wrapper.canModifyName(ROOT_NODE, address(this));
-
-        effectiveExpiry = expiry;
-        if ((fuses & IS_DOT_ETH) != 0) {
-            if (expiry <= PARENT_GRACE_PERIOD) return (false, parentLockedOut, registrarAuthorisedOut, 0);
-            effectiveExpiry = expiry - PARENT_GRACE_PERIOD;
+    function _parentHealth() internal view returns (ParentHealthData memory parent) {
+        (address wrappedOwner, uint32 parentFuses, uint64 parentExpiry) = _wrappedState(ROOT_NODE);
+        if (wrappedOwner == address(0)) {
+            return parent;
         }
 
-        usable = effectiveExpiry > block.timestamp && parentLockedOut && registrarAuthorisedOut;
+        parent.wrapped = true;
+        parent.owner = wrappedOwner;
+        parent.locked = wrapper.allFusesBurned(ROOT_NODE, CANNOT_UNWRAP);
+        parent.authorised = wrapper.canModifyName(ROOT_NODE, address(this));
+
+        parent.effectiveExpiry = parentExpiry;
+        if ((parentFuses & IS_DOT_ETH) != 0) {
+            if (parentExpiry <= PARENT_GRACE_PERIOD) {
+                parent.effectiveExpiry = 0;
+                parent.usable = false;
+                return parent;
+            }
+            parent.effectiveExpiry = parentExpiry - PARENT_GRACE_PERIOD;
+        }
+
+        parent.usable = parent.effectiveExpiry > block.timestamp && parent.locked && parent.authorised;
     }
 
-    function _wrappedState(bytes32 node) internal view returns (address owner, uint32 fuses, uint64 expiry) {
-        try wrapper.getData(uint256(node)) returns (address wrappedOwner, uint32 wrappedFuses, uint64 wrappedExpiry) {
-            return (wrappedOwner, wrappedFuses, wrappedExpiry);
+    function _wrappedState(bytes32 node) internal view returns (address wrappedOwner, uint32 fuses, uint64 wrappedExpiry) {
+        try wrapper.getData(uint256(node)) returns (address owner_, uint32 fuses_, uint64 expiry_) {
+            return (owner_, fuses_, expiry_);
         } catch {
             return (address(0), 0, 0);
         }
     }
 
-    function _nodeForLabel(string memory label) internal pure returns (bytes32) {
-        return keccak256(abi.encodePacked(ROOT_NODE, keccak256(bytes(label))));
-    }
-
-    function _fullName(string memory label) internal pure returns (string memory) {
-        return string.concat(label, ".", ROOT_NAME);
-    }
-
     function _isValidLabel(string memory label) internal pure returns (bool) {
-        bytes memory b = bytes(label);
-        uint256 length = b.length;
-        if (length < MIN_LABEL_LENGTH || length > MAX_LABEL_LENGTH) return false;
+        bytes memory chars = bytes(label);
+        uint256 length = chars.length;
+
+        if (length < MIN_LABEL_LENGTH || length > MAX_LABEL_LENGTH) {
+            return false;
+        }
 
         for (uint256 i = 0; i < length; ) {
-            bytes1 char = b[i];
+            bytes1 char = chars[i];
             bool isNumber = char >= 0x30 && char <= 0x39;
             bool isLower = char >= 0x61 && char <= 0x7A;
-            if (!isNumber && !isLower) return false;
+            if (!isNumber && !isLower) {
+                return false;
+            }
             unchecked {
                 ++i;
             }
         }
+
         return true;
     }
 
-    function _liveStatus(address tokenOwner, address wrappedOwner, uint64 expiry) internal view returns (string memory) {
-        if (wrappedOwner == address(0) || expiry <= block.timestamp) return "expired";
+    function _liveStatus(address tokenOwner, address wrappedOwner, uint64 wrappedExpiry) internal view returns (string memory) {
+        if (wrappedOwner == address(0) || wrappedExpiry <= block.timestamp) return "expired";
         if (tokenOwner != wrappedOwner) return "desynced";
         return "active";
     }
 
     function _extension(uint256 tokenId, TokenData memory data) internal view returns (string memory) {
-        string memory out = '{"parent_name":"';
-        out = string.concat(out, ROOT_NAME);
-        out = string.concat(out, '","parent_node":"', Strings.toHexString(uint256(ROOT_NODE), 32), '"');
-        out = string.concat(out, ',"node":"', Strings.toHexString(tokenId, 32), '"');
-        out = string.concat(out, ',"labelhash":"', Strings.toHexString(uint256(data.labelhash), 32), '"');
-        out = string.concat(out, ',"token_owner":"', Strings.toHexString(ownerOf(tokenId)), '"');
-        (address wrappedOwner, , uint64 expiry) = _wrappedState(bytes32(tokenId));
-        out = string.concat(out, ',"wrapped_owner":"', Strings.toHexString(wrappedOwner), '"');
-        out = string.concat(out, ',"resolver":"', Strings.toHexString(ensRegistry.resolver(bytes32(tokenId))), '"');
-        out = string.concat(out, ',"expiry_unix":', uint256(expiry).toString());
-        out = string.concat(out, ',"minted_at_unix":', uint256(data.mintedAt).toString());
-        out = string.concat(out, ',"source":"onchain","ui_hint":"alpha-agent-identity"}');
-        return out;
+        (address wrappedOwner, , uint64 wrappedExpiry) = _wrappedState(bytes32(tokenId));
+
+        string memory extension = '{"parent_name":"';
+        extension = string.concat(extension, ROOT_NAME);
+        extension = string.concat(extension, '","parent_node":"', Strings.toHexString(uint256(ROOT_NODE), 32), '"');
+        extension = string.concat(extension, ',"node":"', Strings.toHexString(tokenId, 32), '"');
+        extension = string.concat(extension, ',"labelhash":"', Strings.toHexString(uint256(data.labelhash), 32), '"');
+        extension = string.concat(extension, ',"token_owner":"', Strings.toHexString(ownerOf(tokenId)), '"');
+        extension = string.concat(extension, ',"wrapped_owner":"', Strings.toHexString(wrappedOwner), '"');
+        extension = string.concat(extension, ',"resolver":"', Strings.toHexString(ensRegistry.resolver(bytes32(tokenId))), '"');
+        extension = string.concat(extension, ',"expiry_unix":', uint256(wrappedExpiry).toString());
+        extension = string.concat(extension, ',"minted_at_unix":', uint256(data.mintedAt).toString());
+        extension = string.concat(extension, ',"source":"onchain","ui_hint":"alpha-agent-identity"}');
+        return extension;
     }
 
     function _svg(
@@ -442,38 +527,41 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
         address tokenOwner,
         bytes32 node,
         uint256 tokenId,
-        uint64 expiry,
+        uint64 wrappedExpiry,
         string memory statusText
     ) internal pure returns (string memory) {
-        string memory out = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540"><rect width="960" height="540" fill="#4b1f75"/>';
+        string memory out =
+            '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#421563"/><stop offset="100%" stop-color="#6c2ba4"/></linearGradient></defs><rect width="960" height="540" fill="url(#g)"/>';
         out = string.concat(out, '<text x="40" y="70" fill="#fff" font-size="34" font-family="monospace">', fullName, '</text>');
         out = string.concat(out, '<text x="40" y="130" fill="#d8c2ef" font-size="22" font-family="monospace">root: ', ROOT_NAME, '</text>');
         out = string.concat(out, '<text x="40" y="180" fill="#d8c2ef" font-size="22" font-family="monospace">owner: ', Strings.toHexString(tokenOwner), '</text>');
         out = string.concat(out, '<text x="40" y="230" fill="#d8c2ef" font-size="22" font-family="monospace">node: ', _shortHex(node), '</text>');
         out = string.concat(out, '<text x="40" y="280" fill="#d8c2ef" font-size="22" font-family="monospace">tokenId: ', tokenId.toString(), '</text>');
-        out = string.concat(out, '<text x="40" y="330" fill="#d8c2ef" font-size="22" font-family="monospace">expiry: ', uint256(expiry).toString(), '</text>');
+        out = string.concat(out, '<text x="40" y="330" fill="#d8c2ef" font-size="22" font-family="monospace">expiry: ', uint256(wrappedExpiry).toString(), '</text>');
         out = string.concat(out, '<text x="40" y="380" fill="#ffffff" font-size="26" font-family="monospace">status: ', statusText, '</text></svg>');
         return out;
     }
 
     function _namehash(string memory name) internal pure returns (bytes32) {
-        bytes memory b = bytes(name);
+        bytes memory chars = bytes(name);
         bytes32 node;
-        uint256 end = b.length;
+        uint256 end = chars.length;
 
         while (end > 0) {
             uint256 start = end;
-            while (start > 0 && b[start - 1] != ".") {
+            while (start > 0 && chars[start - 1] != ".") {
                 start--;
             }
 
             bytes memory label = new bytes(end - start);
             for (uint256 i = 0; i < label.length; i++) {
-                label[i] = b[start + i];
+                label[i] = chars[start + i];
             }
 
             node = keccak256(abi.encodePacked(node, keccak256(label)));
-            if (start == 0) break;
+            if (start == 0) {
+                break;
+            }
             end = start - 1;
         }
 
@@ -482,15 +570,17 @@ contract FreeTrialSubdomainRegistrarIdentity is ERC721, Ownable2Step, Pausable, 
 
     function _shortHex(bytes32 value) internal pure returns (string memory) {
         string memory full = Strings.toHexString(uint256(value), 32);
-        bytes memory b = bytes(full);
+        bytes memory fullBytes = bytes(full);
         bytes memory out = new bytes(15);
-        out[0] = b[0];
-        out[1] = b[1];
+
+        out[0] = fullBytes[0];
+        out[1] = fullBytes[1];
         for (uint256 i = 0; i < 6; i++) {
-            out[i + 2] = b[i + 2];
-            out[i + 9] = b[b.length - 6 + i];
+            out[2 + i] = fullBytes[2 + i];
+            out[9 + i] = fullBytes[fullBytes.length - 6 + i];
         }
         out[8] = ".";
+
         return string(out);
     }
 }
