@@ -10,7 +10,7 @@ Single active production contract.
 - `available(string label)`
 - `validateLabel(string label)`
 - `preview(string label)`
-- `rootInfo()`
+- `rootHealth()`
 
 ## Root scope
 Hard-coded to `alpha.agent.agi.eth` and its canonical root node.

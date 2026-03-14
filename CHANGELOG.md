@@ -13,9 +13,9 @@ The format is based on Keep a Changelog and this project follows Semantic Versio
 - Added draft next-major release notes at `docs/releases/v2.0.0-draft.md`.
 
 ### Changed
-- Updated deployment and verification scripts to support both `legacy` (default operator-safe mode) and `identity` modes.
+- Migrated the active deploy/operator flow to one production contract only: `FreeTrialSubdomainRegistrarIdentity`.
 - Updated compiler/tooling baseline to Solidity `0.8.24` with optimizer runs 200.
-- Updated README and deployment docs to clearly separate live v1.0.0 legacy deployment from pending identity deployment.
+- Updated README and deployment docs to reflect the root-specific single-contract production flow for `alpha.agent.agi.eth`.
 
 ## [1.0.0] - 2026-03-13
 
